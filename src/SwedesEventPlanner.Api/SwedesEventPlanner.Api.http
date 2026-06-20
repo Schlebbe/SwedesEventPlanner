@@ -15,7 +15,10 @@ GET {{baseUrl}}/api/events
 ### Admin/testing status
 GET {{baseUrl}}/api/admin/status
 
-### Reserved mock activity endpoint
+### Seed local mock activity demo data
+POST {{baseUrl}}/api/admin/dev/seed-mock-activity-demo
+
+### Mock activity endpoint
 POST {{baseUrl}}/api/activity
 Content-Type: application/json
 
@@ -26,5 +29,6 @@ Content-Type: application/json
   "itemId": 22486,
   "itemName": "Scythe of vitur",
   "quantity": 1,
-  "occurredAt": "2026-07-02T18:30:00Z"
+  "occurredAt": "2026-07-02T18:30:00Z",
+  "dedupeKey": "local-demo-scythe-1"
 }

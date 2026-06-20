@@ -1,6 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using SwedesEventPlanner.Application.Activity;
+using SwedesEventPlanner.Application.Admin;
+using SwedesEventPlanner.Infrastructure.Activity;
+using SwedesEventPlanner.Infrastructure.Admin;
 using SwedesEventPlanner.Infrastructure.Persistence;
 
 namespace SwedesEventPlanner.Infrastructure;
@@ -25,6 +29,10 @@ public static class DependencyInjection
                 connectionString,
                 npgsqlOptions => npgsqlOptions.MigrationsAssembly(typeof(EventPlannerDbContext).Assembly.FullName));
         });
+
+        services.AddScoped<IActivityIngestionService, ActivityIngestionService>();
+        services.AddScoped<IActivityProcessingService, ActivityProcessingService>();
+        services.AddScoped<IAdminDevSeedService, AdminDevSeedService>();
 
         return services;
     }
