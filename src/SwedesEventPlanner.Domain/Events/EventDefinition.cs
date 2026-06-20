@@ -1,5 +1,7 @@
 namespace SwedesEventPlanner.Domain.Events;
 
+using SwedesEventPlanner.Domain.Common;
+
 public sealed class EventDefinition
 {
     public long Id { get; set; }
@@ -20,5 +22,5 @@ public sealed class EventDefinition
 
     public DateTimeOffset CreatedAt { get; set; }
 
-    public string ConfigJson { get; set; } = "{}";
+    public string ConfigJson { get; set; } = JsonDefaults.Object;
 }

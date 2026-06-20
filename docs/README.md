@@ -25,6 +25,7 @@ The intended first implementation is a backend, database, and website using mock
 | [15 - External Competition Sync](15-external-competition-sync.md) | TempleOSRS competition sync, cached metrics, cooldowns, and XP/KC scoring source |
 | [16 - TempleOSRS Provider Contract](16-templeosrs-provider-contract.md) | Exact TempleOSRS endpoints, response shapes, cache mapping, and provider caveats |
 | [17 - Event Setup Workflow](17-event-setup-workflow.md) | Admin workflow for signup import, team assignment, Temple export, validation, and scoring |
+| [18 - Local Development Database](18-local-dev-database.md) | Windows local PostgreSQL setup and secret handling notes |
 
 ## Core principle
 
