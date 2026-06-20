@@ -3,6 +3,12 @@
 /deploy/frontend/
 /deploy/pi/
 /logs/
+**/logs/
+*.log
+**/*.log
+**/logs/
+*.log
+**/*.log
 **/bin/
 **/obj/
 **/node_modules/

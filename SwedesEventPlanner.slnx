@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SwedesEventPlanner.Api/SwedesEventPlanner.Api.csproj" />
+    <Project Path="src/SwedesEventPlanner.Application/SwedesEventPlanner.Application.csproj" />
+    <Project Path="src/SwedesEventPlanner.Contracts/SwedesEventPlanner.Contracts.csproj" />
+    <Project Path="src/SwedesEventPlanner.Domain/SwedesEventPlanner.Domain.csproj" />
+    <Project Path="src/SwedesEventPlanner.Infrastructure/SwedesEventPlanner.Infrastructure.csproj" />
+    <Project Path="src/SwedesEventPlanner.Worker/SwedesEventPlanner.Worker.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SwedesEventPlanner.Application.Tests/SwedesEventPlanner.Application.Tests.csproj" />
+    <Project Path="tests/SwedesEventPlanner.Domain.Tests/SwedesEventPlanner.Domain.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,30 @@
+@baseUrl = http://localhost:5000
+
+### Liveness
+GET {{baseUrl}}/health
+
+### Readiness
+GET {{baseUrl}}/health/ready
+
+### Service information
+GET {{baseUrl}}/api
+
+### Public events
+GET {{baseUrl}}/api/events
+
+### Admin/testing status
+GET {{baseUrl}}/api/admin/status
+
+### Reserved mock activity endpoint
+POST {{baseUrl}}/api/activity
+Content-Type: application/json
+
+{
+  "playerName": "Sebbe",
+  "activityType": "item_drop",
+  "source": "Theatre of Blood",
+  "itemId": 22486,
+  "itemName": "Scythe of vitur",
+  "quantity": 1,
+  "occurredAt": "2026-07-02T18:30:00Z"
+}
