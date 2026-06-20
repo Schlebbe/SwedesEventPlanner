@@ -117,7 +117,9 @@ Use FluentValidation in application services.
 
 Enable Swagger/OpenAPI in development. Do not expose Swagger publicly in production by default.
 
-When running the app on the Pi in a development/testing mode, Swagger should be reachable from the Windows development environment without making it publicly exposed. Prefer an SSH tunnel or another explicitly development-only access path.
+The normal development environment is Windows local development. The Raspberry Pi is the production hosting target, not the day-to-day development environment, and there is no separate Pi staging environment planned for MVP.
+
+Swagger should be used locally during Windows development and should not be exposed on the Pi production deployment by default.
 
 Add health endpoints:
 
@@ -197,6 +199,39 @@ The worker must not auto-apply migrations.
 ## Deployment target
 
 The primary deployment target is a Raspberry Pi.
+
+Environment split:
+
+```text
+Windows local development:
+  primary coding/debugging loop
+  run API locally
+  run Worker locally
+  run Vite frontend locally
+  use local PostgreSQL or Testcontainers for integration tests
+  use development config and development seed data
+  enable Swagger/OpenAPI
+  use safe fake/dev secrets only
+  iterate quickly without touching production Pi state
+
+Raspberry Pi production:
+  hosted app environment
+  run swedeseventplanner-api systemd service
+  run swedeseventplanner-worker systemd service
+  use production PostgreSQL database
+  use nginx
+  disable Swagger by default
+  supply real Temple keys/secrets through production env files or systemd-managed secrets
+  apply migrations through explicit deploy/script commands only
+  never auto-migrate on normal production startup
+  do not use for day-to-day development
+```
+
+Do not create a separate Pi staging/dev environment for MVP.
+
+Do not create staging services, staging databases, staging nginx paths, or staging deployment scripts unless explicitly requested later.
+
+Do not blur local development state and production Pi state.
 
 The architecture should still be portable and should not assume Pi-specific paths, IP addresses, database names, credentials, or production URLs.
 

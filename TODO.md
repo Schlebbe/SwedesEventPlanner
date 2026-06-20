@@ -2,6 +2,10 @@
 
 ## After The Application Skeleton Exists
 
+- Keep Windows local development as the only dev environment for MVP.
+- Keep the Raspberry Pi as production hosting only; do not add Pi staging/dev scripts unless that decision changes later.
+- Do not create staging services, staging databases, staging nginx paths, or staging deployment scripts unless explicitly requested later.
+- Keep Pi scripts focused on read-only diagnostics, explicitly requested production deployment, production verification, and production service control after services exist.
 - Create `deploy/env/api.env.example` with safe placeholder values, including `ADMIN_TOKEN=dev-admin-token-change-me`.
 - Create `deploy/env/worker.env.example` if the worker is a separate process.
 - Create `deploy/systemd/swedeseventplanner-api.service`.

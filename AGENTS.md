@@ -87,7 +87,17 @@ nginx
 ASP.NET Core serving the built React frontend in production
 ```
 
+Use Windows local development for the primary coding/debugging loop. Run the API, Worker, Vite frontend, tests, local PostgreSQL or Testcontainers, Swagger/OpenAPI, development config, development seed data, and safe fake/dev secrets locally on Windows.
+
+Use the Raspberry Pi as the production hosting target for MVP. Run production `swedeseventplanner-api`, production `swedeseventplanner-worker`, production PostgreSQL, nginx, production secrets, and explicit production migrations there.
+
+Do not create a separate Pi staging/dev environment unless the user explicitly revisits that decision later. Do not create staging services, staging databases, staging nginx paths, or staging deployment scripts unless explicitly requested later.
+
+Do not do day-to-day development directly on the Pi. Do not blur Windows local development state with production Pi state.
+
 Operator/deployment scripts should be Windows PowerShell scripts run from the local Windows machine. They may execute remote Linux commands on the Pi through the local SSH helpers, but do not add Linux deployment scripts unless the user specifically asks for them.
+
+Keep Pi scripts focused on read-only diagnostics, production deployment when explicitly requested, production verification, and service control after production services exist. Do not deploy to the Pi unless explicitly asked.
 
 Expected future app names and paths:
 
@@ -143,7 +153,7 @@ Use DateTimeOffset with PostgreSQL timestamptz. Store UTC and display in the con
 
 Keep EF Core migrations in SwedesEventPlanner.Infrastructure with the DbContext. The API may auto-apply migrations only in development behind configuration; production uses explicit deploy/script commands; the worker must not auto-apply migrations.
 
-Enable Swagger/OpenAPI in development only. Do not expose it publicly in production by default.
+Enable Swagger/OpenAPI in Windows local development only. Do not expose it on Pi production by default.
 
 Expose health endpoints as:
 

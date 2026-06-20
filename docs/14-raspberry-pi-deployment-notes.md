@@ -156,7 +156,17 @@ frontend production API calls: relative /api paths
 
 Swagger/OpenAPI should not be publicly exposed in production by default.
 
-If the app is running on the Pi in development/testing mode, Swagger should be reachable from the Windows development environment without public exposure. Prefer an SSH tunnel or another explicit development-only access path.
+The Raspberry Pi is the production hosting target for MVP. Keep day-to-day development on Windows local development with local PostgreSQL or Testcontainers, Vite, Swagger, development config, and development seed data.
+
+Do not create a separate Pi staging/dev environment for MVP unless the project explicitly revisits that decision later.
+
+Do not create staging services, staging databases, staging nginx paths, or staging deployment scripts unless explicitly requested later.
+
+Swagger should be used in Windows local development and should not be exposed on the Pi production deployment by default.
+
+Production Temple keys/secrets should be supplied through production env files or systemd-managed secrets. Do not store them in source control, `.env.example`, deployment templates, logs, or API responses.
+
+Production migrations should be applied through explicit deploy/script commands only. The app should not auto-migrate on normal Pi production startup.
 
 Do not hardcode the Pi IP, local LAN subnet, credentials, production URLs, or Linux paths into application code.
 
@@ -189,6 +199,17 @@ check-pi-db-readonly.ps1
 inspect-pi-prereqs.ps1
 custom read-only helper commands through pi-common.ps1
 ```
+
+Keep Pi scripts focused on:
+
+```text
+read-only diagnostics
+production deployment when explicitly requested
+production verification
+service control after production services exist
+```
+
+Do not deploy to the Pi unless explicitly asked.
 
 When this project gets its own scripts, keep the same safety properties:
 
