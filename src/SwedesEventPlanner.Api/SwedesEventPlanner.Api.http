@@ -12,6 +12,18 @@ GET {{baseUrl}}/api
 ### Public events
 GET {{baseUrl}}/api/events
 
+### Public event by slug
+GET {{baseUrl}}/api/events/local-mock-activity-demo
+
+### Public event board
+GET {{baseUrl}}/api/events/local-mock-activity-demo/board
+
+### Public event teams
+GET {{baseUrl}}/api/events/local-mock-activity-demo/teams
+
+### Public event contributions
+GET {{baseUrl}}/api/events/local-mock-activity-demo/contributions
+
 ### Admin/testing status
 GET {{baseUrl}}/api/admin/status
 

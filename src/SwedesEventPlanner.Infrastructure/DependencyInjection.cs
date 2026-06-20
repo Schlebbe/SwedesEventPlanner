@@ -3,8 +3,10 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SwedesEventPlanner.Application.Activity;
 using SwedesEventPlanner.Application.Admin;
+using SwedesEventPlanner.Application.Events;
 using SwedesEventPlanner.Infrastructure.Activity;
 using SwedesEventPlanner.Infrastructure.Admin;
+using SwedesEventPlanner.Infrastructure.Events;
 using SwedesEventPlanner.Infrastructure.Persistence;
 
 namespace SwedesEventPlanner.Infrastructure;
@@ -33,6 +35,7 @@ public static class DependencyInjection
         services.AddScoped<IActivityIngestionService, ActivityIngestionService>();
         services.AddScoped<IActivityProcessingService, ActivityProcessingService>();
         services.AddScoped<IAdminDevSeedService, AdminDevSeedService>();
+        services.AddScoped<IEventReadService, EventReadService>();
 
         return services;
     }

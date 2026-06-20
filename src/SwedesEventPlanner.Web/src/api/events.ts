@@ -9,17 +9,149 @@ export type EventSummary = {
   timeZone: string
 }
 
-type EventListResponse = {
+export type EventListResponse = {
   events: EventSummary[]
 }
 
+export type EventBoard = {
+  event: EventSummary
+  board: Board
+  teams: EventBoardTeam[]
+}
+
+export type Board = {
+  id: number
+  name: string
+  rows: number | null
+  columns: number | null
+  tiles: BoardTile[]
+}
+
+export type BoardTile = {
+  id: number
+  title: string
+  description: string | null
+  positionX: number | null
+  positionY: number | null
+  sortOrder: number
+  teamProgress: BoardTileTeamProgress[]
+  tiers: BoardTileTier[]
+}
+
+export type BoardTileTeamProgress = {
+  teamId: number
+  teamName: string
+  currentValue: number
+  currentTier: number
+  isCompleted: boolean
+  completedAt: string | null
+}
+
+export type BoardTileTier = {
+  id: number
+  tierNumber: number
+  title: string | null
+  description: string | null
+  scoreValue: number
+  isRequiredForBoardCompletion: boolean
+  requiredValue: number | null
+  teamProgress: BoardTileTierTeamProgress[]
+}
+
+export type BoardTileTierTeamProgress = {
+  teamId: number
+  teamName: string
+  currentValue: number
+  isAchieved: boolean
+  achievedAt: string | null
+  isScored: boolean
+  scoredAt: string | null
+  scoreAwarded: number
+}
+
+export type EventBoardTeam = {
+  id: number
+  name: string
+  score: number
+  scoredTiers: number
+  completedTiles: number
+  currentValue: number
+}
+
+export type EventTeamListResponse = {
+  event: EventSummary
+  teams: EventTeamSummary[]
+}
+
+export type EventTeamSummary = {
+  id: number
+  name: string
+  score: number
+  scoredTiers: number
+  completedTiles: number
+  currentValue: number
+  contributionCount: number
+}
+
+export type EventContributionListResponse = {
+  event: EventSummary
+  contributions: EventContribution[]
+}
+
+export type EventContribution = {
+  id: number
+  playerName: string
+  teamId: number | null
+  teamName: string | null
+  tileTitle: string
+  tierTitle: string | null
+  valueAdded: number
+  description: string | null
+  createdAt: string
+}
+
 export async function listEvents(signal?: AbortSignal): Promise<EventSummary[]> {
-  const response = await fetch("/api/events", { signal })
+  const data = await fetchJson<EventListResponse>("/api/events", signal)
+  return data.events
+}
+
+export async function getEvent(
+  slug: string,
+  signal?: AbortSignal,
+): Promise<EventSummary> {
+  return fetchJson<EventSummary>(`/api/events/${slug}`, signal)
+}
+
+export async function getEventBoard(
+  slug: string,
+  signal?: AbortSignal,
+): Promise<EventBoard> {
+  return fetchJson<EventBoard>(`/api/events/${slug}/board`, signal)
+}
+
+export async function getEventTeams(
+  slug: string,
+  signal?: AbortSignal,
+): Promise<EventTeamListResponse> {
+  return fetchJson<EventTeamListResponse>(`/api/events/${slug}/teams`, signal)
+}
+
+export async function getEventContributions(
+  slug: string,
+  signal?: AbortSignal,
+): Promise<EventContributionListResponse> {
+  return fetchJson<EventContributionListResponse>(
+    `/api/events/${slug}/contributions`,
+    signal,
+  )
+}
+
+async function fetchJson<T>(url: string, signal?: AbortSignal): Promise<T> {
+  const response = await fetch(url, { signal })
 
   if (!response.ok) {
-    throw new Error(`Events request failed with ${response.status}`)
+    throw new Error(`${url} request failed with ${response.status}`)
   }
 
-  const data = (await response.json()) as EventListResponse
-  return data.events
+  return (await response.json()) as T
 }
