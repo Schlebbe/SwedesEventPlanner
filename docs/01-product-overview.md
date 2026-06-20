@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The platform is a modular clan event system for Old School RuneScape activity. It should collect player activity, store it as a global activity log, and use configurable event rules to calculate progress for one or more active clan events.
+The platform is a modular clan event system for Old School RuneScape activity. It should collect player activity, store it as a global activity log, sync cached external competition metrics where needed, and use configurable event rules to calculate progress for one or more active clan events.
 
 Bingo is the initial event format, but the architecture should not be limited to bingo. Future event types may include raid point races, drop hunts, skilling competitions, boss kill races, or clan-wide community goals.
 
@@ -14,6 +14,8 @@ The first implementation should include:
 - A database.
 - A basic website for events, teams, boards, and progress.
 - Mocked activity input through Postman, curl, or a simulator script.
+- TempleOSRS competition sync for XP/KC tiles through cached database metrics.
+- A public TempleOSRS update action with cooldown and an admin force-sync path.
 - Support for multiple simultaneous events from the start.
 
 A RuneLite plugin should be treated as a future activity source. The backend should not depend on the plugin existing during the MVP.
@@ -80,10 +82,17 @@ Contributions:
 - Player C: Ghrazi rapier, +3
 ```
 
+### Cached external competition data
+
+XP/KC event scoring should use TempleOSRS competition gains cached in the database.
+
+Sync workers may call TempleOSRS. Rule evaluation and page rendering should read cached rows only.
+
 ## Core principle
 
 ```text
 Plugin/mock sender reports facts.
+External competition sync stores cached metrics.
 Backend stores facts once.
 Every active event evaluates those facts independently.
 Progress is stored per event/team/tile.
@@ -95,6 +104,8 @@ Progress is stored per event/team/tile.
 Application
 ├── Activity ingestion
 ├── Activity storage
+├── External competition sync
+├── Cached metric storage
 ├── Event engine
 ├── Rule engine
 ├── Bingo/event UI
@@ -117,4 +128,3 @@ manual_event
 ```
 
 Only `bingo` needs a full UI in the first version.
-

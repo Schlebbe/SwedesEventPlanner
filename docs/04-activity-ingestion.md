@@ -6,13 +6,17 @@ Activity ingestion receives player activity from a mocked source initially and f
 
 The ingestion layer should store raw facts. It should not decide whether an event goal or bingo tile has been completed.
 
-## Activity endpoint
+TempleOSRS competition sync is a separate external metric path, not activity ingestion. XP/KC scoring rules should read cached external competition rows for MVP.
 
-Recommended MVP endpoint:
+## Mock/dev activity endpoint
+
+Recommended MVP mock/dev endpoint:
 
 ```http
 POST /api/activity
 ```
+
+`/api/activity` is for development, simulator scripts, seed/test tooling, and local manual testing. It should not be treated as the production RuneLite plugin contract.
 
 Example item drop payload:
 
@@ -40,6 +44,8 @@ Example XP snapshot payload:
 }
 ```
 
+XP snapshot activity is for future plugin/stat tracking. MVP XP tile scoring should use cached TempleOSRS competition data instead.
+
 Example KC snapshot payload:
 
 ```json
@@ -51,6 +57,8 @@ Example KC snapshot payload:
   "occurredAt": "2026-07-02T22:10:00Z"
 }
 ```
+
+KC snapshot activity is for future plugin/stat tracking. MVP KC tile scoring should use cached TempleOSRS competition data instead.
 
 ## Ingestion flow
 
@@ -79,15 +87,15 @@ Recommended initial activity types:
 
 ```text
 item_drop
-xp_snapshot
-kc_snapshot
-full_player_snapshot
 manual_test
 ```
 
 Future activity types:
 
 ```text
+xp_snapshot
+kc_snapshot
+full_player_snapshot
 collection_log_entry
 collection_log_snapshot
 raid_completion
@@ -130,6 +138,40 @@ The activity sender should not know about:
 It should only report activity facts.
 
 The backend decides which events the activity affects.
+
+## Ingestion endpoint shape
+
+The backend should support a mock/dev endpoint:
+
+```http
+POST /api/activity
+```
+
+Mocked activity and simulator tests should use this endpoint.
+
+The future RuneLite plugin should use clean canonical plugin endpoints:
+
+```text
+POST /api/plugin/activity
+POST /api/plugin/snapshot
+```
+
+Do not implement compatibility endpoints from the reference plugin.
+
+Plugin endpoints should normalize payloads into the global activity model.
+
+The plugin ingestion layer should:
+
+```text
+read player name from the plugin header
+preserve the full raw payload
+set source_system to runelite_plugin
+set source_endpoint to the received endpoint
+map plugin header time to occurred_at when no better activity timestamp exists
+store received_at from the backend clock
+extract repeated item or metric rows into child tables
+enqueue activity processing in the same transaction
+```
 
 ## Timestamp handling
 
@@ -195,6 +237,8 @@ occurredAt
 
 The API should reject malformed activity with a clear error.
 
+Use ASP.NET Core `ProblemDetails` for error responses.
+
 Examples:
 
 ```text
@@ -209,7 +253,15 @@ Duplicates may return success if idempotency is preferred.
 
 ## Authentication
 
-For MVP, a simple test token or local-only endpoint is enough.
+For the mock/dev `/api/activity` endpoint, a simple test token or local-only endpoint is enough.
+
+Prefer:
+
+```text
+Authorization: Bearer <token>
+```
+
+`X-Admin-Token` can be accepted as an optional fallback for scripts.
 
 Future plugin ingestion should use authentication, such as:
 
@@ -218,4 +270,3 @@ Future plugin ingestion should use authentication, such as:
 - API key per plugin client.
 
 Authentication should not be mixed with event logic.
-

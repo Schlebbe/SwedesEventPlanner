@@ -1,0 +1,34 @@
+/deploy/api/
+/deploy/worker/
+/deploy/frontend/
+/deploy/pi/
+/logs/
+**/bin/
+**/obj/
+**/node_modules/
+**/*.user
+*.slnLaunch.user
+.vs/
+.dotnet/
+.nuget/
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Local Codex/Raspberry Pi helper material (not source-controlled).
+.codex_*
+.codex/
+**/.codex/
+scripts/windows/test-pi-ssh.ps1
+scripts/windows/check-pi-db-readonly.ps1
+.impeccable/
+.agents/
+skills-lock.json
+
+# Local environment and secret overrides (templates with .example stay tracked).
+.env
+.env.*
+*.env
+*.env.*
+!.env.example
+!*.env.example

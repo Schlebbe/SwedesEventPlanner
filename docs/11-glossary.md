@@ -40,6 +40,8 @@ Player had 42,000,000 Slayer XP when the event started.
 
 Progress is calculated as current value minus baseline value.
 
+For MVP event scoring, XP/KC tiles use TempleOSRS competition gains instead of plugin snapshot baselines.
+
 ## Bingo board
 
 A board belonging to a bingo event. It contains tiles.
@@ -72,6 +74,10 @@ Skilling Week
 
 An event has participants, optional teams, start/end times, and rules.
 
+Event timestamps are stored in UTC and displayed in the configured event timezone, defaulting to Europe/Stockholm.
+
+For MVP, event status is manually controlled, but scoring still enforces the event start/end window.
+
 ## Event participant
 
 A player who has joined a specific event.
@@ -83,6 +89,27 @@ Stored in `event_participants`.
 A team belonging to one event.
 
 Teams are event-specific so a player can be on different teams in different events.
+
+## External competition
+
+A linked competition from an external provider such as TempleOSRS.
+
+For MVP, external competitions provide cached XP/KC gains for event tiles.
+
+## External competition metric
+
+A cached per-player result from an external competition.
+
+Examples:
+
+```text
+Player gained 5,000,000 Slayer XP in Temple competition 123.
+Player gained 100 Zulrah KC in Temple competition 456.
+```
+
+Stored in `external_competition_metrics`.
+
+Rows with no matched local player are stored for review but do not count toward progress until matched.
 
 ## Global activity
 
@@ -102,6 +129,12 @@ jars
 pets
 soulreaper_axe_pieces
 ```
+
+## Linked account
+
+An external account identifier associated with a player.
+
+For MVP, linked accounts are mainly useful for matching TempleOSRS RuneScape names, including alternate accounts, to the player whose team should receive credit.
 
 ## Point threshold
 
@@ -137,8 +170,7 @@ Examples:
 ```text
 item_count
 point_threshold
-xp_gained
-kc_gained
+external_competition_metric
 manual
 ```
 
@@ -158,6 +190,8 @@ KC snapshot
 full player snapshot
 collection log snapshot
 ```
+
+Plugin XP/KC snapshots are future stats/tracking inputs, not the MVP scoring source for XP/KC event tiles.
 
 ## Tile
 
@@ -194,4 +228,3 @@ Example:
 ```text
 Tile B unlocks after Tile A reaches tier 2.
 ```
-

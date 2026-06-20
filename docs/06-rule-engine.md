@@ -55,14 +55,15 @@ Recommended MVP rule types:
 ```text
 item_count
 point_threshold
-xp_gained
-kc_gained
+external_competition_metric
 manual
 ```
 
 Future rule types:
 
 ```text
+xp_gained
+kc_gained
 collection_log_obtained
 claimed_reward
 composite
@@ -98,30 +99,33 @@ For team bingo, most rules should use `team` scope.
 
 ## Tiers
 
-Many goals have three tiers.
+Many goals have tiers, but tiers are first-class goals rather than only thresholds inside one rule.
+
+A tier has its own rule or rules. Different tiers on the same tile may use different rule types.
 
 Example:
 
 ```json
 {
-  "tiers": [
-    { "tier": 1, "required": 10 },
-    { "tier": 2, "required": 25 },
-    { "tier": 3, "required": 45 }
-  ]
+  "tileTierId": 1001,
+  "ruleType": "point_threshold",
+  "config": {
+    "required": 10
+  }
 }
 ```
 
-Current tier is derived from current value.
+Tier achievement is derived from the tier's current value and rule result.
 
 Example:
 
 ```text
 current value = 18
-required tier 1 = 10
-required tier 2 = 25
-current tier = 1
+required value = 10
+tier achieved = true
 ```
+
+Tier scoring may be separate from achievement. For cumulative category/tier layouts, a later tier can be achieved before earlier tiers are scored, but should not award score until prerequisite lower tiers have scored.
 
 ## item_count rule
 
@@ -180,6 +184,8 @@ If activity item matches an entry in pointsTable, add that many points.
 
 ## xp_gained rule
 
+Future/plugin-snapshot rule type.
+
 Calculates XP gained since a baseline.
 
 Example config:
@@ -210,6 +216,8 @@ The progress update should set the current value to the calculated XP gained, no
 
 ## kc_gained rule
 
+Future/plugin-snapshot rule type.
+
 Similar to XP gained, but for boss kill count.
 
 Example config:
@@ -230,6 +238,66 @@ Behavior:
 ```text
 Progress = current KC - baseline KC
 ```
+
+## external_competition_metric rule
+
+MVP rule type for XP/KC tiles backed by cached TempleOSRS competition data.
+
+This rule must not call TempleOSRS directly.
+
+Rule evaluation reads `external_competition_metrics` rows only. Those rows are refreshed by the Temple sync worker.
+
+If cached data is missing, stale, or from a failed sync, the rule should still evaluate from the cached rows that exist. It should not fetch live TempleOSRS data as a fallback.
+
+Example XP config:
+
+```json
+{
+  "provider": "templeosrs",
+  "externalCompetitionId": 123,
+  "metricType": "xp",
+  "metricKey": "Slayer",
+  "required": 5000000,
+  "valueField": "gained_value"
+}
+```
+
+Example KC config:
+
+```json
+{
+  "provider": "templeosrs",
+  "externalCompetitionId": 456,
+  "metricType": "kc",
+  "metricKey": "Zulrah",
+  "required": 100,
+  "valueField": "gained_value"
+}
+```
+
+For team-scoped rules:
+
+```text
+team-based linked Temple competition:
+  team value = Temple-returned cached team gained value/total
+
+non-team linked Temple competition:
+  team value = sum(gained_value for known players on that local event team)
+```
+
+For team-based Temple competitions, still cache per-player gains for audit/debugging and surface Temple/local team mismatches in admin/testing views.
+
+For player-scoped rules:
+
+```text
+player value = gained_value for that participant
+```
+
+TempleOSRS competition gain remains the scoring source. Plugin XP/KC snapshots should not be used for MVP scoring.
+
+Because this rule reads cached aggregate state rather than a single incoming activity event, progress should be recalculated after external competition syncs and contribution records should describe the sync/delta that caused the visible progress change.
+
+Progress may increase or decrease if TempleOSRS returns changed gains. The rule should not maintain a separate monotonic scoring value or infer/repair Temple values locally.
 
 ## manual rule
 
@@ -343,4 +411,3 @@ bug fixes
 audits
 testing
 ```
-

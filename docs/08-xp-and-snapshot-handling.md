@@ -1,14 +1,55 @@
-# 08 - XP and Snapshot Handling
+# 08 - XP/KC Source and Snapshot Handling
 
 ## Purpose
 
-XP and KC goals require special handling because they are based on differences between a baseline and a later snapshot.
+XP and KC goals require special handling because they are commonly based on differences between a starting value and a later value.
 
-A major risk is desync at event start. If a player has no earlier snapshot, they could appear to instantly contribute a large amount of XP when they first enable the activity source.
+For MVP event scoring, XP/KC tiles should use cached TempleOSRS competition data as the source of truth.
 
-This document defines baseline behavior to avoid that.
+Plugin XP/KC snapshots may still be useful later for long-term stats tracking, but they should not be the MVP scoring source.
 
-## Snapshot types
+TempleOSRS competition gain remains the scoring source for XP/KC event tiles.
+
+Rule evaluation and page rendering must read cached database rows, not call TempleOSRS directly.
+
+A future plugin-snapshot scoring mode has a major desync risk at event start. If a player has no earlier snapshot, they could appear to instantly contribute a large amount of XP when they first enable the activity source.
+
+This document defines the MVP TempleOSRS source behavior and records future plugin snapshot baseline behavior to avoid that issue if plugin-snapshot scoring is added later.
+
+## MVP source of truth
+
+Use `external_competition_metric` rules for XP/KC tiles.
+
+The Temple sync worker refreshes linked TempleOSRS competitions and stores cached per-player gains and Temple team totals in the database when Temple returns them.
+
+The rule engine then reads cached `external_competition_metrics` rows only.
+
+For MVP XP/KC team tiles:
+
+```text
+team-based linked Temple competition:
+  use cached Temple-returned team totals as the scoring input
+
+non-team linked Temple competition:
+  use cached Temple-returned per-player gains grouped by local SwedesEventPlanner event teams
+```
+
+Always cache per-player gains for audit/debugging.
+
+Always cache Temple team members/totals when Temple returns them.
+
+Do not infer XP/KC gains locally.
+
+This avoids:
+
+```text
+calling TempleOSRS during rule evaluation
+calling TempleOSRS during page rendering
+depending on the RuneLite plugin for XP/KC scoring
+inventing our own XP/KC baseline logic for MVP bingo scoring
+```
+
+## Future snapshot types
 
 Recommended snapshot types:
 
@@ -35,7 +76,7 @@ A full player snapshot can contain multiple categories of data:
 }
 ```
 
-## Snapshot timing
+## Future snapshot timing
 
 Recommended activity source behavior:
 
@@ -52,7 +93,7 @@ Optional while logged in:
 
 The activity source should not need to know which events are active.
 
-## Event baseline problem
+## Plugin snapshot baseline problem
 
 Problem scenario:
 
@@ -65,9 +106,9 @@ First received snapshot says 45,000,000 Slayer XP.
 
 If the backend uses 0 or missing baseline, it may incorrectly count 45,000,000 XP or 5,000,000 XP that may have been gained before the event.
 
-## Baseline policy
+## Plugin snapshot baseline policy
 
-For XP/KC-based event rules, each participant needs an event-specific baseline.
+For future plugin-snapshot XP/KC rules, each participant needs an event-specific baseline.
 
 Recommended baseline source priority:
 
@@ -85,7 +126,7 @@ A player's first snapshot after event start should become their baseline, not im
 
 This prevents instant XP contribution from players who had no pre-event snapshot.
 
-## Baseline locking
+## Baseline locking for future plugin-snapshot scoring
 
 Create event-specific baseline records.
 
@@ -128,7 +169,7 @@ baseline_key = Zulrah
 baseline_value = 1250
 ```
 
-## Baseline creation strategy
+## Baseline creation strategy for future plugin-snapshot scoring
 
 At event start, the backend can attempt to create baselines from existing snapshots.
 
@@ -142,7 +183,7 @@ If not found, mark baseline as pending.
 
 However, the activity source should not need to know the event has started.
 
-## Pending baseline behavior
+## Pending baseline behavior for future plugin-snapshot scoring
 
 If no baseline exists when a snapshot arrives during an active event:
 
@@ -166,7 +207,7 @@ Progress = 800,000
 
 This is fairer than accidentally counting unknown pre-baseline progress.
 
-## Strict event mode
+## Strict event mode for future plugin-snapshot scoring
 
 Some events may want stricter rules.
 
@@ -204,7 +245,7 @@ Admin manually enters or approves baselines.
 
 Useful for competitive or prize-heavy events.
 
-## XP progress calculation
+## XP progress calculation for future plugin-snapshot scoring
 
 For player-scoped XP:
 
@@ -220,7 +261,7 @@ team progress = sum(max(0, player_current_xp - player_baseline_xp))
 
 Do not add each snapshot as a contribution of full XP. Snapshots replace the current known value.
 
-## Contribution strategy for snapshots
+## Contribution strategy for future plugin snapshots
 
 XP/KC snapshots are different from drops.
 
@@ -255,7 +296,7 @@ Contribution value added: +400,000
 Current progress: 1,200,000
 ```
 
-## Full player snapshot on login
+## Full player snapshot on login for future stats
 
 A login snapshot is useful because it gives the backend a recent state without event awareness.
 
@@ -269,7 +310,7 @@ Player logs in
   -> if missing baseline exists, create it from this snapshot and award zero progress
 ```
 
-## Full player snapshot on event start
+## Full player snapshot on event start for future stats
 
 The activity source should not need to send a snapshot because an event starts.
 
@@ -283,9 +324,21 @@ If none exists, use the first later snapshot as baseline or require admin action
 
 ## UI indicators
 
-The website should show baseline status for XP/KC rules.
+For MVP Temple-backed XP/KC rules, the website should show:
 
-Examples:
+```text
+linked TempleOSRS competition
+last successful sync time
+next public refresh availability
+current cached team/player gained value
+whether the latest sync failed
+```
+
+Participant-facing freshness should be based on the last successful sync. Failed sync details should be logged in `external_competition_sync_runs` and surfaced in admin/testing views.
+
+For future plugin-snapshot XP/KC rules, the website may also show baseline status.
+
+Baseline status examples:
 
 ```text
 Ready: baseline locked
@@ -301,15 +354,17 @@ This prevents confusion during event start.
 For MVP, use this policy:
 
 ```text
-first_snapshot_as_baseline
+TempleOSRS competition gains through cached external_competition_metric rules
 ```
 
 Meaning:
 
 ```text
-If a player has a pre-event snapshot, use it.
-If not, their first snapshot during the event becomes baseline and awards zero progress.
+Temple sync worker refreshes linked competitions.
+Cached competition rows are stored in the database.
+XP/KC tile rules read cached gained values.
+Rule evaluation and page rendering never call TempleOSRS directly.
+Plugin XP/KC snapshots are not used for event scoring.
 ```
 
-This avoids unfair instant XP/KC gains while keeping the system easy to use.
-
+Future plugin-snapshot scoring may use `first_snapshot_as_baseline` if needed, but it is not part of MVP XP/KC scoring.

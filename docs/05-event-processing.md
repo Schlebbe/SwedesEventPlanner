@@ -6,6 +6,8 @@ Event processing evaluates newly received activity against all relevant active e
 
 Events should not constantly poll the database for new activity. Instead, activity ingestion creates a processing job, and a worker processes those jobs.
 
+External competition processing is separate from raw activity ingestion. TempleOSRS sync jobs refresh cached competition metrics and then recalculate affected `external_competition_metric` rules.
+
 ## Processing flow
 
 ```text
@@ -21,7 +23,18 @@ ActivityWorker
   -> insert progress contributions
   -> update current progress
   -> mark job processed
+
+TempleSyncWorker
+  -> refresh linked TempleOSRS competition
+  -> update cached external_competition_metrics
+  -> record external_competition_sync_runs
+  -> recalculate affected external_competition_metric rules
+  -> update current progress
 ```
+
+`POST /api/activity` is the mock/dev ingestion endpoint used by simulator and local testing tools. Future production RuneLite plugin ingestion should use the canonical `/api/plugin/...` endpoints.
+
+Temple sync jobs should use `external_competition_sync_runs` as their queue/state table, separate from `activity_processing_queue`.
 
 ## Why use a queue?
 
@@ -108,12 +121,14 @@ Recommended filters:
 ```text
 event_participants.player_id = activity.player_id
 event_participants.status = 'active'
-events.status IN ('active', 'scheduled') depending on time handling
+events.status = 'active'
 activity.occurred_at >= events.starts_at
 activity.occurred_at <= events.ends_at, when ends_at is not null
 ```
 
-If event status is strictly maintained, only `active` events need processing. If scheduled events can receive late activity after they start, use the time window as the source of truth.
+For MVP, event status is manually controlled, but the event time window must still be enforced. Future work can add automatic status transitions.
+
+For team-scoped events, active participants with no team assignment should not contribute progress until assigned to a team. Surface those players in admin/testing views.
 
 ## Rule matching
 
@@ -128,6 +143,16 @@ Activity type: item_drop
 Only evaluate rules with activityType item_drop or generic/manual rules.
 ```
 
+For Temple-backed XP/KC tiles:
+
+```text
+Sync source: external competition metrics
+Only recalculate rules linked to the synced external competition.
+Do not call TempleOSRS from the rule engine.
+```
+
+Rule recalculation must read cached `external_competition_metrics` only.
+
 ## Applying progress
 
 When a rule matches activity, insert a contribution before updating current progress.
@@ -138,6 +163,14 @@ Update event_tile_progress
 ```
 
 The contribution table provides auditability and makes progress rebuildable.
+
+For `external_competition_metric` rules, progress should be recalculated from cached competition rows after a sync. Contributions should record the visible delta or audit entry caused by the sync run.
+
+Temple-backed progress can increase or decrease when cached TempleOSRS gains change. Do not maintain a separate monotonic scoring value for XP/KC tiles.
+
+Store Temple recalculation audit/contribution entries per affected tile/team per sync run, including decreases. Negative adjustments should be visible in tile details and admin/testing views, but not spammed into the main participant contribution feed.
+
+UI freshness should use the external competition's last successful sync time, not merely the most recent attempted sync.
 
 ## Idempotency
 
@@ -190,6 +223,10 @@ LIMIT 10;
 
 This allows multiple workers later without processing the same job twice.
 
+Temple sync jobs need the same kind of guard per external competition. An admin force-sync can bypass public cooldown, but if a sync is already queued or running for that competition, the system should not enqueue a duplicate concurrent worker job.
+
+Failed Temple sync jobs should be marked failed in `external_competition_sync_runs` with a useful error message and surfaced in admin/testing views.
+
 ## Processing outside event time
 
 Activity outside an event's start/end window should not progress that event.
@@ -217,3 +254,4 @@ A future rebuild process could:
 
 This is useful if rule configs are corrected after an event starts.
 
+For Temple-backed XP/KC rules, rebuilds should use cached `external_competition_metrics` rows. If fresh Temple data is needed, run a sync first, then rebuild from the cache.

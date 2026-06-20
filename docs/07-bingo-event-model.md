@@ -64,25 +64,69 @@ Example tile:
 }
 ```
 
-The tile can have one or more rules.
+The tile can have one or more tiers.
 
 ## Tiers
 
-Tiers should be configured inside the rule config.
+Tiers should be modeled as first-class goals.
+
+A tier can have its own rules, and tiers on the same tile may use different rule types.
 
 Example:
 
 ```json
 {
-  "tiers": [
-    { "tier": 1, "required": 10 },
-    { "tier": 2, "required": 25 },
-    { "tier": 3, "required": 45 }
-  ]
+  "tileId": 10,
+  "tierNumber": 1,
+  "title": "TOB Tier 1",
+  "scoreValue": 1,
+  "isRequiredForBoardCompletion": true
 }
 ```
 
-A tile can be partially complete if it has reached tier 1 or tier 2 but not tier 3.
+A tile can be partially complete if tier 1 or tier 2 has scored but tier 3 has not.
+
+The system should distinguish:
+
+```text
+achieved = the condition happened
+scored = the tier counts toward board completion and points
+```
+
+For cumulative tier layouts, a later tier may be achieved before earlier tiers are scored. In that case, the later tier should not award score until the earlier required tiers are also scored.
+
+Example:
+
+```text
+Tier 3 objective: receive a Scythe of vitur
+Team receives a Scythe while tier 1 and tier 2 are still incomplete
+Tier 3 is achieved
+Tier 3 is not scored
+Tier 3 scores only after tier 1 and tier 2 are scored
+```
+
+## Grid completion modes
+
+Grid boards should support configurable completion modes.
+
+Planned modes:
+
+```text
+full_board
+any_line
+specific_number_of_lines
+all_lines
+custom
+```
+
+MVP should support at least:
+
+```text
+full_board
+any_line
+```
+
+The primary expected mode is `full_board`, but the board completion logic should not hardcode one meaning for all grid boards.
 
 ## Team-based progress
 
@@ -116,6 +160,7 @@ Rule:
 ```json
 {
   "ruleType": "point_threshold",
+  "tileTierId": 1001,
   "scope": "team",
   "config": {
     "activityType": "item_drop",
@@ -126,14 +171,12 @@ Rule:
       { "itemId": 22481, "name": "Sanguinesti staff", "points": 3 },
       { "itemId": 22486, "name": "Scythe of vitur", "points": 7 }
     ],
-    "tiers": [
-      { "tier": 1, "required": 10 },
-      { "tier": 2, "required": 25 },
-      { "tier": 3, "required": 45 }
-    ]
+    "required": 10
   }
 }
 ```
+
+Additional TOB tiers would have their own `bingo_tile_tiers` rows and rules with different `required` values.
 
 ## Example Yama tile with cumulative armor
 
@@ -203,21 +246,23 @@ Rule:
 
 ```json
 {
-  "ruleType": "xp_gained",
+  "ruleType": "external_competition_metric",
+  "tileTierId": 2001,
   "scope": "team",
   "config": {
-    "activityType": "xp_snapshot",
-    "skill": "Slayer",
-    "baseline": "event_start",
-    "tiers": [
-      { "tier": 1, "required": 5000000 },
-      { "tier": 2, "required": 15000000 }
-    ]
+    "provider": "templeosrs",
+    "externalCompetitionId": 123,
+    "metricType": "xp",
+    "metricKey": "Slayer",
+    "required": 5000000,
+    "valueField": "gained_value"
   }
 }
 ```
 
-For team scope, each player's gained XP is calculated separately against their own baseline, then summed for the team.
+For team scope, each player's cached TempleOSRS gained XP is summed for the team.
+
+Additional Slayer tiers would have their own `bingo_tile_tiers` rows and rules with different `required` values.
 
 ## Example Pets tile
 
@@ -299,3 +344,8 @@ Contributions:
 
 This should come from `event_progress_contributions`.
 
+## Board completion
+
+For category/tier boards, a board is complete when all required tiers are scored, not merely achieved.
+
+For grid boards, board completion is determined by the board's configured completion mode.

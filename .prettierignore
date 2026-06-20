@@ -1,0 +1,15 @@
+bin
+obj
+node_modules
+dist
+build
+coverage
+deploy/api
+deploy/worker
+deploy/frontend
+deploy/pi
+logs
+*.sln
+*.csproj
+*.props
+*.targets
