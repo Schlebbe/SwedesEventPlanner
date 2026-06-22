@@ -62,6 +62,20 @@ public static class Program
     {
         app.UseExceptionHandler();
         app.UseStatusCodePages();
+        app.Use(async (context, next) =>
+        {
+            try
+            {
+                await next(context);
+            }
+            catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
+            {
+                context.RequestServices
+                    .GetRequiredService<ILoggerFactory>()
+                    .CreateLogger("RequestCancellation")
+                    .LogDebug("Request was cancelled by the client: {Path}", context.Request.Path);
+            }
+        });
 
         if (app.Environment.IsDevelopment())
         {

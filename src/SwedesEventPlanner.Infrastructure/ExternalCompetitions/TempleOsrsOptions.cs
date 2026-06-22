@@ -11,4 +11,6 @@ public sealed class TempleOsrsOptions
     public string UserAgent { get; set; } = "SwedesEventPlanner/1.0 (+https://github.com/swedes-event-planner)";
 
     public int PublicRefreshCooldownMinutes { get; set; } = 5;
+
+    public int AutoSyncIntervalMinutes { get; set; } = 15;
 }

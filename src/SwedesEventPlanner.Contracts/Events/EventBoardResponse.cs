@@ -7,6 +7,13 @@ public sealed record EventBoardResponse(
     IReadOnlyList<EventBoardTeamResponse> Teams,
     IReadOnlyList<EventExternalCompetitionFreshnessResponse> ExternalCompetitionFreshness);
 
+/// <summary>Represents a public event board filtered to one team.</summary>
+public sealed record EventTeamBoardResponse(
+    EventSummaryResponse Event,
+    EventBoardTeamResponse Team,
+    BoardResponse Board,
+    IReadOnlyList<EventExternalCompetitionFreshnessResponse> ExternalCompetitionFreshness);
+
 /// <summary>Represents a bingo board.</summary>
 public sealed record BoardResponse(
     long Id,

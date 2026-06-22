@@ -52,6 +52,74 @@ public sealed class EventReadServiceTests
     }
 
     [Fact]
+    public async Task Board_response_reads_required_value_rule_config_alias()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedProgressAsync(dbContext);
+        var rule = await dbContext.TileRules.SingleAsync();
+        rule.ConfigJson = """{"activityType":"item_drop","requiredValue":10}""";
+        await dbContext.SaveChangesAsync();
+        var service = new EventReadService(dbContext);
+
+        var response = await service.GetBoardAsync(fixture.EventSlug, CancellationToken.None);
+
+        Assert.NotNull(response);
+        Assert.Equal(10m, Assert.Single(Assert.Single(response.Board.Tiles).Tiers).RequiredValue);
+    }
+
+    [Fact]
+    public async Task Team_board_response_filters_progress_to_requested_team()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedProgressAsync(dbContext);
+        var eventDefinition = await dbContext.Events.SingleAsync(candidate => candidate.Slug == fixture.EventSlug);
+        var tile = await dbContext.BingoTiles.SingleAsync();
+        var tier = await dbContext.BingoTileTiers.SingleAsync();
+        var redTeam = new EventTeam
+        {
+            EventId = eventDefinition.Id,
+            Name = "Red",
+            CreatedAt = TestNow
+        };
+        dbContext.EventTeams.Add(redTeam);
+        await dbContext.SaveChangesAsync();
+        dbContext.EventTileProgress.Add(new EventTileProgress
+        {
+            EventId = eventDefinition.Id,
+            TileId = tile.Id,
+            TeamId = redTeam.Id,
+            PlayerId = null,
+            CurrentValue = 99,
+            CurrentTier = 1,
+            IsCompleted = true,
+            UpdatedAt = TestNow
+        });
+        dbContext.EventTileTierProgress.Add(new EventTileTierProgress
+        {
+            EventId = eventDefinition.Id,
+            TileId = tile.Id,
+            TileTierId = tier.Id,
+            TeamId = redTeam.Id,
+            PlayerId = null,
+            CurrentValue = 99,
+            IsAchieved = true,
+            IsScored = true,
+            ScoreAwarded = 1,
+            UpdatedAt = TestNow
+        });
+        await dbContext.SaveChangesAsync();
+        var service = new EventReadService(dbContext);
+
+        var response = await service.GetTeamBoardAsync(fixture.EventSlug, fixture.TeamId, CancellationToken.None);
+
+        Assert.NotNull(response);
+        Assert.Equal(fixture.TeamId, response.Team.Id);
+        var responseTile = Assert.Single(response.Board.Tiles);
+        Assert.Equal(fixture.TeamId, Assert.Single(responseTile.TeamProgress).TeamId);
+        Assert.Equal(fixture.TeamId, Assert.Single(Assert.Single(responseTile.Tiers).TeamProgress).TeamId);
+    }
+
+    [Fact]
     public async Task Contribution_feed_hides_internal_activity_rule_and_metadata_fields()
     {
         await using var dbContext = CreateDbContext();

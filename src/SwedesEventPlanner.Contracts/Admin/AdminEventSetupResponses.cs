@@ -54,11 +54,20 @@ public sealed record AdminEventParticipantResponse(
     DateTimeOffset JoinedAt,
     bool IsUnassigned);
 
+/// <summary>Admin-facing participant grouping by team assignment.</summary>
+public sealed record AdminEventTeamRosterResponse(
+    long? TeamId,
+    string TeamName,
+    bool IsUnassigned,
+    int ParticipantCount,
+    IReadOnlyList<AdminEventParticipantResponse> Participants);
+
 /// <summary>Admin-facing participant and team roster for event setup.</summary>
 public sealed record AdminEventParticipantListResponse(
     AdminEventSetupSummaryResponse Event,
     IReadOnlyList<AdminEventTeamResponse> Teams,
     IReadOnlyList<AdminEventParticipantResponse> Participants,
+    IReadOnlyList<AdminEventTeamRosterResponse> TeamGroups,
     int UnassignedCount);
 
 /// <summary>Admin-facing bingo board row.</summary>

@@ -27,14 +27,26 @@ import { Input } from "@/components/ui/input"
 import { formatTimestamp } from "@/components/event/event-format"
 
 const tokenStorageKey = "swedes-event-planner-admin-token"
+const selectControlClassName =
+  "h-9 rounded-lg border border-input bg-background px-2.5 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 [&>option]:bg-background [&>option]:text-foreground"
+const timezoneOptions = [
+  { value: "Etc/GMT+3", label: "UTC-3" },
+  { value: "Etc/GMT+2", label: "UTC-2" },
+  { value: "Etc/GMT+1", label: "UTC-1" },
+  { value: "UTC", label: "UTC+0" },
+  { value: "Etc/GMT-1", label: "UTC+1" },
+  { value: "Europe/Stockholm", label: "UTC+1/+2 Europe/Stockholm" },
+  { value: "Etc/GMT-2", label: "UTC+2" },
+  { value: "Etc/GMT-3", label: "UTC+3" },
+]
 
 const defaultEvent = (): CreateAdminEventRequest => ({
   slug: "",
   name: "",
   eventType: "bingo",
   status: "draft",
-  startsAt: new Date().toISOString(),
-  endsAt: null,
+  startsAt: toDatetimeLocalValue(new Date()),
+  endsAt: "",
   timeZone: "Europe/Stockholm",
 })
 
@@ -50,14 +62,30 @@ export function AdminHomePage() {
     queryFn: ({ signal }) => listAdminEvents(adminToken, signal),
     enabled: tokenReady,
     retry: false,
+    refetchInterval: 10000,
   })
 
   const createMutation = useMutation({
-    mutationFn: () => createAdminEvent(eventForm, adminToken),
+    mutationFn: () =>
+      createAdminEvent(
+        {
+          ...eventForm,
+          startsAt: fromDatetimeLocalValue(eventForm.startsAt),
+          endsAt: eventForm.endsAt ? fromDatetimeLocalValue(eventForm.endsAt) : null,
+        },
+        adminToken,
+      ),
     onSuccess: async (event) => {
       setEventForm(defaultEvent())
       await queryClient.invalidateQueries({ queryKey: ["admin-events"] })
-      navigate(`/admin/events/${event.slug}/setup`)
+      navigate(`/admin/events/${event.slug}/setup`, {
+        state: {
+          actionMessage: {
+            type: "success",
+            text: `Event created: ${event.name}.`,
+          },
+        },
+      })
     },
   })
 
@@ -193,7 +221,7 @@ function CreateEventCard({
           <label className="flex flex-col gap-2 text-sm font-medium">
             Status
             <select
-              className="h-9 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+              className={selectControlClassName}
               value={eventForm.status}
               onChange={(event) => onChange({ ...eventForm, status: event.target.value })}
             >
@@ -210,8 +238,48 @@ function CreateEventCard({
             />
           </label>
         </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="flex flex-col gap-2 text-sm font-medium">
+            Starts at
+            <Input
+              type="datetime-local"
+              value={eventForm.startsAt}
+              onChange={(event) => onChange({ ...eventForm, startsAt: event.target.value })}
+            />
+          </label>
+          <label className="flex flex-col gap-2 text-sm font-medium">
+            Ends at
+            <Input
+              type="datetime-local"
+              value={eventForm.endsAt ?? ""}
+              onChange={(event) => onChange({ ...eventForm, endsAt: event.target.value || null })}
+            />
+          </label>
+        </div>
+        <label className="flex flex-col gap-2 text-sm font-medium">
+          Timezone
+          <select
+            className={selectControlClassName}
+            value={eventForm.timeZone}
+            onChange={(event) => onChange({ ...eventForm, timeZone: event.target.value })}
+          >
+            {timezoneOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <p className="text-xs text-muted-foreground">
+          Activity only counts while the event is active and inside this time window.
+        </p>
         <Button
-          disabled={disabled || eventForm.slug.trim().length === 0 || eventForm.name.trim().length === 0}
+          disabled={
+            disabled ||
+            eventForm.slug.trim().length === 0 ||
+            eventForm.name.trim().length === 0 ||
+            eventForm.startsAt.trim().length === 0
+          }
           onClick={onCreate}
         >
           <PlusIcon data-icon="inline-start" aria-hidden="true" />
@@ -225,4 +293,13 @@ function CreateEventCard({
 
 function errorText(error: unknown) {
   return error instanceof Error ? error.message : "The request failed."
+}
+
+function toDatetimeLocalValue(date: Date) {
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+  return local.toISOString().slice(0, 16)
+}
+
+function fromDatetimeLocalValue(value: string) {
+  return new Date(value).toISOString()
 }

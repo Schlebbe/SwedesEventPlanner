@@ -31,6 +31,9 @@ public sealed class ExternalCompetitionSyncService(
     private TimeSpan PublicRefreshCooldown =>
         TimeSpan.FromMinutes(Math.Max(0, options.Value.PublicRefreshCooldownMinutes));
 
+    private TimeSpan AutoSyncInterval =>
+        TimeSpan.FromMinutes(Math.Max(1, options.Value.AutoSyncIntervalMinutes));
+
     public async Task<AdminExternalCompetitionResponse?> LinkTempleCompetitionAsync(
         string eventSlug,
         LinkExternalCompetitionRequest request,
@@ -50,7 +53,8 @@ public sealed class ExternalCompetitionSyncService(
 
         var competition = await dbContext.ExternalCompetitions.SingleOrDefaultAsync(
             candidate => candidate.Provider == ExternalCompetitionProviders.TempleOsrs &&
-                candidate.ExternalId == externalId,
+                candidate.ExternalId == externalId &&
+                candidate.EventId == eventDefinition.Id,
             cancellationToken);
 
         if (competition is null)
@@ -69,10 +73,6 @@ public sealed class ExternalCompetitionSyncService(
                 ConfigJson = JsonSerializer.Serialize(new { source = "admin_link" }, JsonOptions)
             };
             dbContext.ExternalCompetitions.Add(competition);
-        }
-        else if (competition.EventId != eventDefinition.Id)
-        {
-            throw new AdminEventSetupException("Temple competition is already linked to a different event.");
         }
         else
         {
@@ -199,6 +199,48 @@ public sealed class ExternalCompetitionSyncService(
         }
 
         return new EventTempleRefreshResponse(MapEventSummary(eventDefinition), results);
+    }
+
+    public async Task<int> SyncDueActiveCompetitionsAsync(CancellationToken cancellationToken)
+    {
+        var now = clock.UtcNow;
+        var dueBefore = now.Subtract(AutoSyncInterval);
+        var dueCompetitions = await (
+                from competition in dbContext.ExternalCompetitions.AsNoTracking()
+                join eventDefinition in dbContext.Events.AsNoTracking()
+                    on competition.EventId equals eventDefinition.Id
+                where competition.Provider == ExternalCompetitionProviders.TempleOsrs &&
+                    competition.Status == ExternalCompetitionStatuses.Active &&
+                    eventDefinition.Status == EventStatuses.Active &&
+                    eventDefinition.StartsAt <= now &&
+                    (eventDefinition.EndsAt == null || eventDefinition.EndsAt >= now) &&
+                    (competition.LastSyncedAt == null || competition.LastSyncedAt <= dueBefore)
+                orderby competition.LastSyncedAt ?? DateTimeOffset.MinValue, competition.Id
+                select new
+                {
+                    competition.Id,
+                    eventDefinition.Slug
+                })
+            .ToListAsync(cancellationToken);
+
+        var started = 0;
+        foreach (var competition in dueCompetitions)
+        {
+            var run = await SyncCompetitionAsync(
+                competition.Slug,
+                competition.Id,
+                triggerType: "worker_periodic",
+                cancellationToken);
+
+            if (run is not null &&
+                run.Status != ExternalCompetitionSyncRunStatuses.SkippedAlreadyRunning &&
+                run.Status != ExternalCompetitionSyncRunStatuses.SkippedCooldown)
+            {
+                started++;
+            }
+        }
+
+        return started;
     }
 
     private async Task<AdminExternalCompetitionSyncRunResponse?> SyncCompetitionAsync(

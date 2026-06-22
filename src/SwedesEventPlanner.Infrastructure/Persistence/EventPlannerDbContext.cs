@@ -275,7 +275,7 @@ public sealed class EventPlannerDbContext(DbContextOptions<EventPlannerDbContext
             MapJsonObject(entity.Property(competition => competition.ConfigJson).HasColumnName("config_json"));
 
             entity.HasOne<EventDefinition>().WithMany().HasForeignKey(competition => competition.EventId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasIndex(competition => new { competition.Provider, competition.ExternalId }).IsUnique();
+            entity.HasIndex(competition => new { competition.EventId, competition.Provider, competition.ExternalId }).IsUnique();
         });
 
         modelBuilder.Entity<ExternalCompetitionExportRun>(entity =>

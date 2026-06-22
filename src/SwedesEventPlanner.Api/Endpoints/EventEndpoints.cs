@@ -68,6 +68,22 @@ public static class EventEndpoints
         .Produces<EventTeamListResponse>(StatusCodes.Status200OK)
         .Produces(StatusCodes.Status404NotFound);
 
+        group.MapGet("/{slug}/teams/{teamId:long}/board", async Task<Results<Ok<EventTeamBoardResponse>, NotFound>> (
+            string slug,
+            long teamId,
+            IEventReadService eventReadService,
+            CancellationToken cancellationToken) =>
+        {
+            var board = await eventReadService.GetTeamBoardAsync(slug, teamId, cancellationToken);
+            return board is null
+                ? TypedResults.NotFound()
+                : TypedResults.Ok(board);
+        })
+        .WithName("GetEventTeamBoard")
+        .WithSummary("Get a public event board filtered to one team.")
+        .Produces<EventTeamBoardResponse>(StatusCodes.Status200OK)
+        .Produces(StatusCodes.Status404NotFound);
+
         group.MapGet("/{slug}/contributions", async Task<Results<Ok<EventContributionListResponse>, NotFound>> (
             string slug,
             IEventReadService eventReadService,

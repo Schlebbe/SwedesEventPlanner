@@ -130,6 +130,12 @@ internal sealed class TierProgressScoringService(EventPlannerDbContext dbContext
             return requiredElement.GetDecimal();
         }
 
+        if (config.RootElement.TryGetProperty("requiredValue", out var requiredValueElement) &&
+            requiredValueElement.ValueKind == JsonValueKind.Number)
+        {
+            return requiredValueElement.GetDecimal();
+        }
+
         if (!config.RootElement.TryGetProperty("tiers", out var tiersElement) ||
             tiersElement.ValueKind != JsonValueKind.Array)
         {
@@ -144,6 +150,14 @@ internal sealed class TierProgressScoringService(EventPlannerDbContext dbContext
                 tierRequiredElement.ValueKind == JsonValueKind.Number)
             {
                 return tierRequiredElement.GetDecimal();
+            }
+
+            if (tierElement.TryGetProperty("tier", out var tierValueNumberElement) &&
+                tierValueNumberElement.GetInt32() == tierNumber &&
+                tierElement.TryGetProperty("requiredValue", out var tierRequiredValueElement) &&
+                tierRequiredValueElement.ValueKind == JsonValueKind.Number)
+            {
+                return tierRequiredValueElement.GetDecimal();
             }
         }
 

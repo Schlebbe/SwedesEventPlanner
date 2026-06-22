@@ -12,8 +12,7 @@ Use this checklist for Windows local development only. Do not deploy to the Rasp
 ## Empty Local Database
 
 - For a clean smoke test, run `scripts/windows/dev/reset-local-database.ps1` against the local development database only.
-- Run `scripts/windows/dev/update-local-database.ps1`.
-- Verify migrations apply without secrets in command output.
+- Verify the reset clears local app data and reapplies migrations without secrets in command output.
 - Do not use demo seed endpoints; app-level fake/demo seed data has been removed.
 
 ## Manual Event Setup
@@ -48,6 +47,7 @@ Use this checklist for Windows local development only. Do not deploy to the Rasp
 - Create a board for the event.
 - Create at least three tiles.
 - Add one or more tiers to each tile.
+- Create only one active rule per tier. Use separate tiles or tiers when testing different rule types.
 - Create an `item_count` rule with `itemIds`, `requiredValue`, and `duplicatesCount`.
 - Create a `point_threshold` rule with a `pointsTable` and `requiredValue`.
 - Create an `external_competition_metric` rule with `provider`, `externalCompetitionId`, `metricType`, `metricKey`, and `requiredValue`.
@@ -79,7 +79,10 @@ Use this checklist for Windows local development only. Do not deploy to the Rasp
 
 - Open `/events`.
 - Open the manually created event.
-- Verify the scoreboard, teams, tile progress, tier progress, contribution feed, and TempleOSRS freshness panel render.
+- Verify `/events/{eventSlug}` shows a team-first scoreboard overview with team cards and recent contributions.
+- Open `/events/{eventSlug}/teams/{teamId}` from a team card.
+- Verify the team board shows tile progress, tier progress, contribution feed, and TempleOSRS freshness.
+- Submit activity and verify the public overview/team board update through automatic polling without a manual browser reload.
 - Verify team-level Temple sync contributions with no player display safely.
 - Verify negative Temple sync adjustments do not appear in the main public contribution feed.
 

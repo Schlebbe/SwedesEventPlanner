@@ -75,7 +75,7 @@ export function TopNav({ activeSlug }: { activeSlug?: string }) {
     <nav className="flex flex-wrap items-center gap-2">
       <NavItem to="/events">Events</NavItem>
       <NavItem to="/admin">Admin Setup</NavItem>
-      {activeSlug ? <NavItem to={`/events/${activeSlug}`}>Board</NavItem> : null}
+      {activeSlug ? <NavItem to={`/events/${activeSlug}`}>Overview</NavItem> : null}
       {activeSlug ? <NavItem to={`/admin/events/${activeSlug}/setup`}>Event Setup</NavItem> : null}
     </nav>
   )
@@ -267,7 +267,11 @@ function TileTierBlock({
                     aria-hidden="true"
                   />
                   <span className="truncate">{team?.name ?? progress.teamName}</span>
-                  {progress.isAchieved ? <Badge variant="secondary">done</Badge> : null}
+                  {progress.isScored ? (
+                    <Badge variant="secondary">scored</Badge>
+                  ) : progress.isAchieved ? (
+                    <Badge variant="outline">ready</Badge>
+                  ) : null}
                 </div>
                 <span className="font-mono tabular-nums text-muted-foreground">
                   {formatNumber(progress.currentValue)}
@@ -319,7 +323,9 @@ export function ContributionFeed({
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium">
-                  {contribution.playerName} added {formatNumber(contribution.valueAdded)} to {contribution.tileTitle}
+                  {contribution.playerName === "TempleOSRS sync"
+                    ? `TempleOSRS sync added ${formatNumber(contribution.valueAdded)} to ${contribution.tileTitle}`
+                    : `${contribution.playerName} added ${formatNumber(contribution.valueAdded)} to ${contribution.tileTitle}`}
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {contribution.teamName ?? "No team"} · {contribution.tierTitle ?? "Tile"} ·{" "}

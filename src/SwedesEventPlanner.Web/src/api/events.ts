@@ -20,6 +20,13 @@ export type EventBoard = {
   externalCompetitionFreshness: EventExternalCompetitionFreshness[]
 }
 
+export type EventTeamBoard = {
+  event: EventSummary
+  team: EventBoardTeam
+  board: Board
+  externalCompetitionFreshness: EventExternalCompetitionFreshness[]
+}
+
 export type Board = {
   id: number
   name: string
@@ -162,6 +169,14 @@ export async function getEventTeams(
   signal?: AbortSignal,
 ): Promise<EventTeamListResponse> {
   return fetchJson<EventTeamListResponse>(`/api/events/${slug}/teams`, signal)
+}
+
+export async function getEventTeamBoard(
+  slug: string,
+  teamId: number,
+  signal?: AbortSignal,
+): Promise<EventTeamBoard> {
+  return fetchJson<EventTeamBoard>(`/api/events/${slug}/teams/${teamId}/board`, signal)
 }
 
 export async function getEventContributions(

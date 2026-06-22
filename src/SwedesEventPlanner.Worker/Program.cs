@@ -22,6 +22,7 @@ public static class Program
         builder.Services.AddApplication();
         builder.Services.AddInfrastructure(builder.Configuration);
         builder.Services.AddHostedService<ActivityProcessingWorker>();
+        builder.Services.AddHostedService<TempleSyncWorker>();
 
         var host = builder.Build();
         await host.RunAsync();

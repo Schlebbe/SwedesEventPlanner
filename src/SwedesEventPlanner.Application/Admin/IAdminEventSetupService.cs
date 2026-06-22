@@ -77,4 +77,21 @@ public interface IAdminEventSetupService
         long ruleId,
         UpsertTileRuleRequest request,
         CancellationToken cancellationToken);
+
+    Task<bool> DeleteTileAsync(
+        string eventSlug,
+        long tileId,
+        CancellationToken cancellationToken);
+
+    Task<bool> DeleteTileTierAsync(
+        string eventSlug,
+        long tileId,
+        long tileTierId,
+        CancellationToken cancellationToken);
+
+    Task<bool> DeleteTileRuleAsync(
+        string eventSlug,
+        long tileId,
+        long ruleId,
+        CancellationToken cancellationToken);
 }

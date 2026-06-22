@@ -14,6 +14,11 @@ public interface IEventReadService
         string slug,
         CancellationToken cancellationToken);
 
+    Task<EventTeamBoardResponse?> GetTeamBoardAsync(
+        string slug,
+        long teamId,
+        CancellationToken cancellationToken);
+
     Task<EventTeamListResponse?> GetTeamsAsync(
         string slug,
         CancellationToken cancellationToken);

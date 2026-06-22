@@ -2,16 +2,18 @@ import { useMemo, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   AlertTriangleIcon,
+  CheckCircleIcon,
   DatabaseIcon,
   LayersIcon,
   LinkIcon,
   PlusIcon,
   RefreshCwIcon,
   SaveIcon,
+  Trash2Icon,
   UploadIcon,
   UsersIcon,
 } from "lucide-react"
-import { useParams } from "react-router-dom"
+import { useLocation, useParams } from "react-router-dom"
 import {
   assignParticipantTeam,
   createBingoBoard,
@@ -19,6 +21,9 @@ import {
   createBingoTileTier,
   createEventTeam,
   createTileRule,
+  deleteBingoTile,
+  deleteBingoTileTier,
+  deleteTileRule,
   getAdminBoardSetup,
   importCsvSignups,
   linkTempleCompetition,
@@ -36,6 +41,7 @@ import {
   type AdminExternalCompetitionTeamMetric,
   type AdminExternalCompetitionUnmatchedIdentity,
   type AdminBingoTile,
+  type AdminEventTeamRoster,
   type AdminEventParticipant,
   type AdminTileRule,
   type CsvSignupImportResponse,
@@ -67,9 +73,26 @@ const sampleCsv = [
   "Timestamp,Email Address,RuneScape Name,Availability,Daily Hours,Preferred Content,Notes,Team Preference",
   "2026-07-02T17:30:00Z,player@example.invalid,Sebbe,Evenings,3,Raids,Ready,Blue",
 ].join("\n")
+const selectControlClassName =
+  "h-9 rounded-lg border border-input bg-background px-2.5 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 [&>option]:bg-background [&>option]:text-foreground"
+const compactSelectControlClassName =
+  "h-8 rounded-lg border border-input bg-background px-2.5 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 [&>option]:bg-background [&>option]:text-foreground"
+const tierNumberOptions = [1, 2, 3, 4, 5]
+const activityTypeOptions = [
+  { value: "item_drop", label: "Item drop" },
+  { value: "collection_log_entry", label: "Collection log entry" },
+  { value: "xp_snapshot", label: "XP snapshot" },
+  { value: "collection_log_snapshot", label: "Collection log snapshot" },
+]
+
+type ActionMessage = {
+  type: "success" | "error"
+  text: string
+}
 
 export function AdminEventSetupPage() {
   const { eventSlug } = useParams()
+  const location = useLocation()
   const slug = eventSlug ?? ""
   const queryClient = useQueryClient()
   const [adminToken, setAdminToken] = useState(() => localStorage.getItem(tokenStorageKey) ?? "")
@@ -83,12 +106,25 @@ export function AdminEventSetupPage() {
   const [tileTitle, setTileTitle] = useState("")
   const [tileDescription, setTileDescription] = useState("")
   const [selectedTileId, setSelectedTileId] = useState<number | null>(null)
+  const [selectedRuleTierId, setSelectedRuleTierId] = useState<number | null>(null)
   const [tierTitle, setTierTitle] = useState("")
   const [tierNumber, setTierNumber] = useState("1")
   const [tierTarget, setTierTarget] = useState("1")
   const [ruleType, setRuleType] = useState("item_count")
   const [ruleScope, setRuleScope] = useState("team")
   const [ruleConfigJson, setRuleConfigJson] = useState(defaultRuleConfig("item_count", "1"))
+  const [useAdvancedRuleConfig, setUseAdvancedRuleConfig] = useState(false)
+  const [itemActivityType, setItemActivityType] = useState("item_drop")
+  const [itemIds, setItemIds] = useState("22486")
+  const [duplicatesCount, setDuplicatesCount] = useState(true)
+  const [pointActivityType, setPointActivityType] = useState("item_drop")
+  const [pointRows, setPointRows] = useState("22486,10")
+  const [externalCompetitionId, setExternalCompetitionId] = useState("")
+  const [externalMetricType, setExternalMetricType] = useState("xp")
+  const [externalMetricKey, setExternalMetricKey] = useState("overall")
+  const [actionMessage, setActionMessage] = useState<ActionMessage | null>(() =>
+    readNavigationActionMessage(location.state),
+  )
   const tokenReady = adminToken.trim().length > 0
 
   const signupsQuery = useQuery({
@@ -96,24 +132,28 @@ export function AdminEventSetupPage() {
     queryFn: ({ signal }) => listAdminSignups(slug, adminToken, signal),
     enabled: slug.length > 0 && tokenReady,
     retry: false,
+    refetchInterval: 10000,
   })
   const participantsQuery = useQuery({
     queryKey: ["admin-event-participants", slug, tokenReady],
     queryFn: ({ signal }) => listAdminParticipants(slug, adminToken, signal),
     enabled: slug.length > 0 && tokenReady,
     retry: false,
+    refetchInterval: 10000,
   })
   const competitionsQuery = useQuery({
     queryKey: ["admin-external-competitions", slug, tokenReady],
     queryFn: ({ signal }) => listExternalCompetitions(slug, adminToken, signal),
     enabled: slug.length > 0 && tokenReady,
     retry: false,
+    refetchInterval: 10000,
   })
   const boardSetupQuery = useQuery({
     queryKey: ["admin-board-setup", slug, tokenReady],
     queryFn: ({ signal }) => getAdminBoardSetup(slug, adminToken, signal),
     enabled: slug.length > 0 && tokenReady,
     retry: false,
+    refetchInterval: 10000,
   })
   const selectedCompetition =
     competitionsQuery.data?.competitions.find((competition) => competition.id === selectedCompetitionId) ??
@@ -126,6 +166,7 @@ export function AdminEventSetupPage() {
       listExternalCompetitionSyncRuns(effectiveCompetitionId ?? 0, adminToken, signal),
     enabled: tokenReady && effectiveCompetitionId !== null,
     retry: false,
+    refetchInterval: 5000,
   })
   const playerMetricsQuery = useQuery({
     queryKey: ["admin-external-competition-player-metrics", effectiveCompetitionId, tokenReady],
@@ -133,6 +174,7 @@ export function AdminEventSetupPage() {
       listExternalCompetitionPlayerMetrics(effectiveCompetitionId ?? 0, adminToken, signal),
     enabled: tokenReady && effectiveCompetitionId !== null,
     retry: false,
+    refetchInterval: 10000,
   })
   const teamMetricsQuery = useQuery({
     queryKey: ["admin-external-competition-team-metrics", effectiveCompetitionId, tokenReady],
@@ -140,6 +182,7 @@ export function AdminEventSetupPage() {
       listExternalCompetitionTeamMetrics(effectiveCompetitionId ?? 0, adminToken, signal),
     enabled: tokenReady && effectiveCompetitionId !== null,
     retry: false,
+    refetchInterval: 10000,
   })
   const unmatchedQuery = useQuery({
     queryKey: ["admin-external-competition-unmatched", effectiveCompetitionId, tokenReady],
@@ -147,6 +190,7 @@ export function AdminEventSetupPage() {
       listExternalCompetitionUnmatchedIdentities(effectiveCompetitionId ?? 0, adminToken, signal),
     enabled: tokenReady && effectiveCompetitionId !== null,
     retry: false,
+    refetchInterval: 10000,
   })
 
   const event = participantsQuery.data?.event ?? signupsQuery.data?.event
@@ -158,25 +202,29 @@ export function AdminEventSetupPage() {
     () => participantsQuery.data?.teams ?? [],
     [participantsQuery.data?.teams],
   )
-  const unassignedParticipants = useMemo(
-    () => participants.filter((participant) => participant.isUnassigned),
-    [participants],
-  )
+  const teamGroups = participantsQuery.data?.teamGroups ?? []
 
   const importMutation = useMutation({
     mutationFn: () => importCsvSignups(slug, csvText, adminToken),
     onSuccess: async (response) => {
       setLastImport(response)
+      setActionMessage({
+        type: "success",
+        text: `CSV imported: ${response.participantsCreated} participant(s) created, ${response.participantsUpdated} updated.`,
+      })
       await invalidateSetupQueries(queryClient, slug)
     },
+    onError: (error) => setActionMessage({ type: "error", text: errorText(error) }),
   })
 
   const createTeamMutation = useMutation({
     mutationFn: () => createEventTeam(slug, teamName, adminToken),
-    onSuccess: async () => {
+    onSuccess: async (team) => {
       setTeamName("")
+      setActionMessage({ type: "success", text: `Team created: ${team.name}.` })
       await invalidateSetupQueries(queryClient, slug)
     },
+    onError: (error) => setActionMessage({ type: "error", text: errorText(error) }),
   })
 
   const assignTeamMutation = useMutation({
@@ -186,22 +234,29 @@ export function AdminEventSetupPage() {
       return assignParticipantTeam(slug, participant.id, teamId, adminToken)
     },
     onSuccess: async () => {
+      setActionMessage({ type: "success", text: "Participant team assignment updated." })
       await invalidateSetupQueries(queryClient, slug)
     },
+    onError: (error) => setActionMessage({ type: "error", text: errorText(error) }),
   })
   const linkTempleMutation = useMutation({
     mutationFn: () => linkTempleCompetition(slug, templeCompetitionId, adminToken),
     onSuccess: async (competition) => {
       setTempleCompetitionId("")
       setSelectedCompetitionId(competition.id)
+      setExternalCompetitionId(competition.id.toString())
+      setActionMessage({ type: "success", text: `Temple competition linked: ${competition.name}.` })
       await invalidateExternalCompetitionQueries(queryClient, slug, competition.id)
     },
+    onError: (error) => setActionMessage({ type: "error", text: errorText(error) }),
   })
   const createBoardMutation = useMutation({
     mutationFn: () => createBingoBoard(slug, { name: boardName, rows: 5, columns: 5 }, adminToken),
-    onSuccess: async () => {
+    onSuccess: async (board) => {
+      setActionMessage({ type: "success", text: `Board saved: ${board.name}.` })
       await invalidateBoardSetupQueries(queryClient, slug)
     },
+    onError: (error) => setActionMessage({ type: "error", text: errorText(error) }),
   })
   const createTileMutation = useMutation({
     mutationFn: () =>
@@ -221,8 +276,11 @@ export function AdminEventSetupPage() {
       setTileTitle("")
       setTileDescription("")
       setSelectedTileId(tile.id)
+      setSelectedRuleTierId(null)
+      setActionMessage({ type: "success", text: `Tile created: ${tile.title}.` })
       await invalidateBoardSetupQueries(queryClient, slug)
     },
+    onError: (error) => setActionMessage({ type: "error", text: errorText(error) }),
   })
   const createTierMutation = useMutation({
     mutationFn: () =>
@@ -239,11 +297,14 @@ export function AdminEventSetupPage() {
         },
         adminToken,
       ),
-    onSuccess: async () => {
+    onSuccess: async (tier) => {
       setTierTitle("")
+      setSelectedRuleTierId(tier.id)
       setRuleConfigJson(defaultRuleConfig(ruleType, tierTarget))
+      setActionMessage({ type: "success", text: "Tier created." })
       await invalidateBoardSetupQueries(queryClient, slug)
     },
+    onError: (error) => setActionMessage({ type: "error", text: errorText(error) }),
   })
   const createRuleMutation = useMutation({
     mutationFn: () =>
@@ -251,24 +312,71 @@ export function AdminEventSetupPage() {
         slug,
         selectedTileId ?? boardSetupQuery.data?.tiles[0]?.id ?? 0,
         {
-          tileTierId: selectedTileTierId(boardSetupQuery.data?.tiles ?? [], selectedTileId),
+          tileTierId: selectedTileTierId(boardSetupQuery.data?.tiles ?? [], selectedTileId, selectedRuleTierId),
           ruleType,
           scope: ruleScope,
           isActive: true,
-          configJson: ruleConfigJson,
+          configJson: buildRuleConfigJson({
+            ruleType,
+            useAdvancedRuleConfig,
+            ruleConfigJson,
+            tierTarget,
+            itemActivityType,
+            itemIds,
+            duplicatesCount,
+            pointActivityType,
+            pointRows,
+            externalCompetitionId,
+            externalMetricType,
+            externalMetricKey,
+          }),
         },
         adminToken,
       ),
     onSuccess: async () => {
+      setActionMessage({ type: "success", text: "Rule created." })
       await invalidateBoardSetupQueries(queryClient, slug)
     },
+    onError: (error) => setActionMessage({ type: "error", text: errorText(error) }),
+  })
+  const deleteTileMutation = useMutation({
+    mutationFn: (tile: AdminBingoTile) => deleteBingoTile(slug, tile.id, adminToken),
+    onSuccess: async (_result, tile) => {
+      setSelectedTileId(null)
+      setActionMessage({ type: "success", text: `Tile deleted: ${tile.title}.` })
+      await invalidateBoardSetupQueries(queryClient, slug)
+    },
+    onError: (error) => setActionMessage({ type: "error", text: errorText(error) }),
+  })
+  const deleteTierMutation = useMutation({
+    mutationFn: ({ tile, tierId }: { tile: AdminBingoTile; tierId: number }) =>
+      deleteBingoTileTier(slug, tile.id, tierId, adminToken),
+    onSuccess: async () => {
+      setActionMessage({ type: "success", text: "Tier deleted." })
+      await invalidateBoardSetupQueries(queryClient, slug)
+    },
+    onError: (error) => setActionMessage({ type: "error", text: errorText(error) }),
+  })
+  const deleteRuleMutation = useMutation({
+    mutationFn: ({ tile, ruleId }: { tile: AdminBingoTile; ruleId: number }) =>
+      deleteTileRule(slug, tile.id, ruleId, adminToken),
+    onSuccess: async () => {
+      setActionMessage({ type: "success", text: "Rule deleted." })
+      await invalidateBoardSetupQueries(queryClient, slug)
+    },
+    onError: (error) => setActionMessage({ type: "error", text: errorText(error) }),
   })
   const syncTempleMutation = useMutation({
     mutationFn: (competition: AdminExternalCompetition) =>
       syncExternalCompetition(slug, competition.id, adminToken),
     onSuccess: async (_run, competition) => {
+      setActionMessage({
+        type: _run.status === "failed" ? "error" : "success",
+        text: _run.status === "failed" ? "Temple sync failed." : `Temple sync ${_run.status}.`,
+      })
       await invalidateExternalCompetitionQueries(queryClient, slug, competition.id)
     },
+    onError: (error) => setActionMessage({ type: "error", text: errorText(error) }),
   })
 
   function saveToken(value: string) {
@@ -289,6 +397,10 @@ export function AdminEventSetupPage() {
         />
         <TopNav activeSlug={slug || undefined} />
       </header>
+
+      {actionMessage ? (
+        <ActionMessageCard message={actionMessage} onDismiss={() => setActionMessage(null)} />
+      ) : null}
 
       <section className="grid gap-4 lg:grid-cols-[0.8fr_1.2fr]">
         <div className="flex flex-col gap-4">
@@ -325,8 +437,19 @@ export function AdminEventSetupPage() {
             ruleType={ruleType}
             ruleScope={ruleScope}
             ruleConfigJson={ruleConfigJson}
+            useAdvancedRuleConfig={useAdvancedRuleConfig}
+            itemActivityType={itemActivityType}
+            itemIds={itemIds}
+            duplicatesCount={duplicatesCount}
+            pointActivityType={pointActivityType}
+            pointRows={pointRows}
+            externalCompetitionId={externalCompetitionId}
+            externalMetricType={externalMetricType}
+            externalMetricKey={externalMetricKey}
             selectedTileId={selectedTileId}
+            selectedRuleTierId={selectedRuleTierId}
             tiles={boardSetupQuery.data?.tiles ?? []}
+            linkedCompetitions={competitionsQuery.data?.competitions ?? []}
             hasBoard={Boolean(boardSetupQuery.data?.board)}
             disabled={!tokenReady}
             errors={[
@@ -350,7 +473,20 @@ export function AdminEventSetupPage() {
             }}
             onRuleScopeChange={setRuleScope}
             onRuleConfigJsonChange={setRuleConfigJson}
-            onSelectedTileChange={setSelectedTileId}
+            onUseAdvancedRuleConfigChange={setUseAdvancedRuleConfig}
+            onItemActivityTypeChange={setItemActivityType}
+            onItemIdsChange={setItemIds}
+            onDuplicatesCountChange={setDuplicatesCount}
+            onPointActivityTypeChange={setPointActivityType}
+            onPointRowsChange={setPointRows}
+            onExternalCompetitionIdChange={setExternalCompetitionId}
+            onExternalMetricTypeChange={setExternalMetricType}
+            onExternalMetricKeyChange={setExternalMetricKey}
+            onSelectedTileChange={(value) => {
+              setSelectedTileId(value)
+              setSelectedRuleTierId(null)
+            }}
+            onSelectedRuleTierChange={setSelectedRuleTierId}
             onCreateBoard={() => createBoardMutation.mutate()}
             onCreateTile={() => createTileMutation.mutate()}
             onCreateTier={() => createTierMutation.mutate()}
@@ -378,6 +514,7 @@ export function AdminEventSetupPage() {
           ) : (
             <RosterCard
               participants={participants}
+              teamGroups={teamGroups}
               selectedTeams={selectedTeams}
               teams={teams}
               unassignedCount={participantsQuery.data?.unassignedCount ?? 0}
@@ -399,10 +536,6 @@ export function AdminEventSetupPage() {
             <SignupsCard signups={signupsQuery.data?.signups ?? []} />
           )}
 
-          {unassignedParticipants.length > 0 ? (
-            <UnassignedCard participants={unassignedParticipants} />
-          ) : null}
-
           <SectionHeading title="Board Setup" description="Manual tile, tier, and rule configuration" />
           {!tokenReady ? null : boardSetupQuery.isLoading ? (
             <StateCard title="Loading board setup" detail="Reading board, tiles, tiers, and rules." />
@@ -412,6 +545,10 @@ export function AdminEventSetupPage() {
             <BoardSetupSummaryCard
               boardName={boardSetupQuery.data?.board?.name ?? null}
               tiles={boardSetupQuery.data?.tiles ?? []}
+              isDeleting={deleteTileMutation.isPending || deleteTierMutation.isPending || deleteRuleMutation.isPending}
+              onDeleteTile={(tile) => deleteTileMutation.mutate(tile)}
+              onDeleteTier={(tile, tierId) => deleteTierMutation.mutate({ tile, tierId })}
+              onDeleteRule={(tile, ruleId) => deleteRuleMutation.mutate({ tile, ruleId })}
             />
           )}
 
@@ -441,6 +578,52 @@ export function AdminEventSetupPage() {
       </section>
     </AppFrame>
   )
+}
+
+function ActionMessageCard({
+  message,
+  onDismiss,
+}: {
+  message: ActionMessage
+  onDismiss: () => void
+}) {
+  const isSuccess = message.type === "success"
+
+  return (
+    <Card className={cn(isSuccess ? "border-primary/40 bg-primary/5" : "border-destructive/50 bg-destructive/5")}>
+      <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-2 text-sm">
+          {isSuccess ? (
+            <CheckCircleIcon className="mt-0.5 size-4 text-primary" aria-hidden="true" />
+          ) : (
+            <AlertTriangleIcon className="mt-0.5 size-4 text-destructive" aria-hidden="true" />
+          )}
+          <p className={cn(isSuccess ? "text-foreground" : "text-destructive")}>{message.text}</p>
+        </div>
+        <Button size="sm" variant="ghost" onClick={onDismiss}>
+          Dismiss
+        </Button>
+      </CardContent>
+    </Card>
+  )
+}
+
+function readNavigationActionMessage(state: unknown): ActionMessage | null {
+  if (!state || typeof state !== "object" || !("actionMessage" in state)) {
+    return null
+  }
+
+  const message = (state as { actionMessage?: Partial<ActionMessage> }).actionMessage
+  if (
+    message?.type !== "success" &&
+    message?.type !== "error"
+  ) {
+    return null
+  }
+
+  return typeof message.text === "string" && message.text.length > 0
+    ? { type: message.type, text: message.text }
+    : null
 }
 
 function AdminTokenCard({
@@ -611,6 +794,7 @@ function TempleLinkCard({
 
 function RosterCard({
   participants,
+  teamGroups,
   teams,
   selectedTeams,
   unassignedCount,
@@ -620,6 +804,7 @@ function RosterCard({
   onAssign,
 }: {
   participants: AdminEventParticipant[]
+  teamGroups: AdminEventTeamRoster[]
   teams: { id: number; name: string; participantCount: number }[]
   selectedTeams: Record<number, string>
   unassignedCount: number
@@ -631,6 +816,19 @@ function RosterCard({
   if (participants.length === 0) {
     return <StateCard title="No participants" detail="Import signups to create event participants." />
   }
+
+  const groups =
+    teamGroups.length > 0
+      ? teamGroups
+      : [
+          {
+            teamId: null,
+            teamName: "Unassigned",
+            isUnassigned: true,
+            participantCount: participants.length,
+            participants,
+          },
+        ]
 
   return (
     <Card>
@@ -646,45 +844,64 @@ function RosterCard({
           </div>
         </div>
       </CardHeader>
-      <CardContent className="flex flex-col gap-3">
-        {participants.map((participant, index) => (
-          <div key={participant.id} className="flex flex-col gap-3">
-            {index > 0 ? <Separator /> : null}
-            <div
-              className={cn(
-                "grid gap-3 rounded-md p-2 md:grid-cols-[1fr_0.8fr_auto] md:items-center",
-                participant.isUnassigned ? "bg-accent/10 ring-1 ring-accent/30" : "bg-transparent",
-              )}
-            >
-              <div className="min-w-0">
-                <div className="flex min-w-0 items-center gap-2">
-                  <p className="truncate text-sm font-medium">{participant.displayName}</p>
-                  {participant.isUnassigned ? <Badge variant="secondary">needs team</Badge> : null}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {participant.runeScapeName} · {participant.status}
-                </p>
+      <CardContent className="flex flex-col gap-4">
+        {groups.map((group) => (
+          <div
+            key={group.teamId ?? "unassigned"}
+            className={cn(
+              "rounded-lg border bg-background/40",
+              group.isUnassigned ? "border-accent/60 bg-accent/10" : "",
+            )}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2">
+              <div className="flex min-w-0 items-center gap-2">
+                <UsersIcon className="size-4 text-muted-foreground" aria-hidden="true" />
+                <h3 className="truncate text-sm font-medium">{group.teamName}</h3>
+                {group.isUnassigned ? <Badge variant="secondary">assign these</Badge> : null}
               </div>
-              <select
-                className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-                value={selectedTeams[participant.id] ?? participant.teamId?.toString() ?? "none"}
-                onChange={(event) => onSelectTeam(participant.id, event.target.value)}
-              >
-                <option value="none">No team</option>
-                {teams.map((team) => (
-                  <option key={team.id} value={team.id}>
-                    {team.name}
-                  </option>
-                ))}
-              </select>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={isAssigning && assigningParticipantId === participant.id}
-                onClick={() => onAssign(participant)}
-              >
-                Assign
-              </Button>
+              <Badge variant="outline">{group.participantCount} player(s)</Badge>
+            </div>
+            <div className="flex flex-col gap-2 p-3">
+              {group.participants.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No players assigned yet.</p>
+              ) : (
+                group.participants.map((participant) => (
+                  <div
+                    key={participant.id}
+                    className="grid gap-3 rounded-md p-2 md:grid-cols-[1fr_0.8fr_auto] md:items-center"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <p className="truncate text-sm font-medium">{participant.displayName}</p>
+                        {participant.isUnassigned ? <Badge variant="secondary">needs team</Badge> : null}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {participant.runeScapeName} · {participant.teamName ?? "No team"} · {participant.status}
+                      </p>
+                    </div>
+                    <select
+                      className={compactSelectControlClassName}
+                      value={selectedTeams[participant.id] ?? participant.teamId?.toString() ?? "none"}
+                      onChange={(event) => onSelectTeam(participant.id, event.target.value)}
+                    >
+                      <option value="none">No team</option>
+                      {teams.map((team) => (
+                        <option key={team.id} value={team.id}>
+                          {team.name}
+                        </option>
+                      ))}
+                    </select>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={isAssigning && assigningParticipantId === participant.id}
+                      onClick={() => onAssign(participant)}
+                    >
+                      Assign
+                    </Button>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         ))}
@@ -737,25 +954,6 @@ function SignupsCard({
   )
 }
 
-function UnassignedCard({ participants }: { participants: AdminEventParticipant[] }) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Unassigned</CardTitle>
-        <CardDescription>These players will not count for team-scoped scoring until assigned.</CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-2">
-        {participants.map((participant) => (
-          <div key={participant.id} className="flex items-center gap-2 text-sm">
-            <UsersIcon data-icon="inline-start" aria-hidden="true" />
-            <span>{participant.displayName}</span>
-          </div>
-        ))}
-      </CardContent>
-    </Card>
-  )
-}
-
 function BoardSetupActionsCard({
   boardName,
   tileTitle,
@@ -766,8 +964,19 @@ function BoardSetupActionsCard({
   ruleType,
   ruleScope,
   ruleConfigJson,
+  useAdvancedRuleConfig,
+  itemActivityType,
+  itemIds,
+  duplicatesCount,
+  pointActivityType,
+  pointRows,
+  externalCompetitionId,
+  externalMetricType,
+  externalMetricKey,
   selectedTileId,
+  selectedRuleTierId,
   tiles,
+  linkedCompetitions,
   hasBoard,
   disabled,
   errors,
@@ -781,7 +990,17 @@ function BoardSetupActionsCard({
   onRuleTypeChange,
   onRuleScopeChange,
   onRuleConfigJsonChange,
+  onUseAdvancedRuleConfigChange,
+  onItemActivityTypeChange,
+  onItemIdsChange,
+  onDuplicatesCountChange,
+  onPointActivityTypeChange,
+  onPointRowsChange,
+  onExternalCompetitionIdChange,
+  onExternalMetricTypeChange,
+  onExternalMetricKeyChange,
   onSelectedTileChange,
+  onSelectedRuleTierChange,
   onCreateBoard,
   onCreateTile,
   onCreateTier,
@@ -796,8 +1015,19 @@ function BoardSetupActionsCard({
   ruleType: string
   ruleScope: string
   ruleConfigJson: string
+  useAdvancedRuleConfig: boolean
+  itemActivityType: string
+  itemIds: string
+  duplicatesCount: boolean
+  pointActivityType: string
+  pointRows: string
+  externalCompetitionId: string
+  externalMetricType: string
+  externalMetricKey: string
   selectedTileId: number | null
+  selectedRuleTierId: number | null
   tiles: AdminBingoTile[]
+  linkedCompetitions: AdminExternalCompetition[]
   hasBoard: boolean
   disabled: boolean
   errors: (Error | null)[]
@@ -811,20 +1041,41 @@ function BoardSetupActionsCard({
   onRuleTypeChange: (value: string) => void
   onRuleScopeChange: (value: string) => void
   onRuleConfigJsonChange: (value: string) => void
+  onUseAdvancedRuleConfigChange: (value: boolean) => void
+  onItemActivityTypeChange: (value: string) => void
+  onItemIdsChange: (value: string) => void
+  onDuplicatesCountChange: (value: boolean) => void
+  onPointActivityTypeChange: (value: string) => void
+  onPointRowsChange: (value: string) => void
+  onExternalCompetitionIdChange: (value: string) => void
+  onExternalMetricTypeChange: (value: string) => void
+  onExternalMetricKeyChange: (value: string) => void
   onSelectedTileChange: (value: number | null) => void
+  onSelectedRuleTierChange: (value: number | null) => void
   onCreateBoard: () => void
   onCreateTile: () => void
   onCreateTier: () => void
   onCreateRule: () => void
 }) {
   const selectedTile = tiles.find((tile) => tile.id === selectedTileId) ?? tiles[0] ?? null
+  const selectedTier =
+    selectedTile?.tiers.find((tier) => tier.id === selectedRuleTierId) ?? selectedTile?.tiers[0] ?? null
+  const usedTierNumbers = new Set(selectedTile?.tiers.map((tier) => tier.tierNumber) ?? [])
+  const tierNumberValue = numberOrDefault(tierNumber, 1)
+  const tierNumberAlreadyExists = Boolean(selectedTile && usedTierNumbers.has(tierNumberValue))
+  const selectedTierHasActiveRule = Boolean(
+    selectedTier &&
+      selectedTile?.rules.some((rule) => rule.tileTierId === selectedTier.id && rule.isActive),
+  )
   const firstError = errors.find(Boolean)
+  const canCreateTier = Boolean(selectedTile && !tierNumberAlreadyExists)
+  const canCreateRule = Boolean(selectedTile && selectedTier && !selectedTierHasActiveRule)
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Board Builder</CardTitle>
-        <CardDescription>Manual MVP setup. Rule config is validated JSON.</CardDescription>
+        <CardDescription>Create one active rule per tier. Advanced JSON is optional.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
@@ -868,14 +1119,14 @@ function BoardSetupActionsCard({
         <label className="flex flex-col gap-2 text-sm font-medium">
           Selected tile
           <select
-            className="h-9 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            className={selectControlClassName}
             value={selectedTile?.id ?? ""}
             onChange={(event) => onSelectedTileChange(event.target.value ? Number(event.target.value) : null)}
           >
             <option value="">Choose tile</option>
             {tiles.map((tile) => (
               <option key={tile.id} value={tile.id}>
-                {tile.title}
+                {tile.title} ({tile.tiers.length} tier(s), {tile.rules.length} rule(s))
               </option>
             ))}
           </select>
@@ -884,11 +1135,24 @@ function BoardSetupActionsCard({
         <div className="grid gap-3 sm:grid-cols-3">
           <label className="flex flex-col gap-2 text-sm font-medium">
             Tier number
-            <Input value={tierNumber} inputMode="numeric" onChange={(event) => onTierNumberChange(event.target.value)} />
+            <select
+              className={selectControlClassName}
+              value={tierNumber}
+              onChange={(event) => onTierNumberChange(event.target.value)}
+            >
+              {tierNumberOptions.map((number) => (
+                <option key={number} value={number} disabled={usedTierNumbers.has(number)}>
+                  {usedTierNumbers.has(number) ? `Tier ${number} already exists` : `Tier ${number}`}
+                </option>
+              ))}
+            </select>
           </label>
           <label className="flex flex-col gap-2 text-sm font-medium">
-            Tier target
+            Completion target
             <Input value={tierTarget} inputMode="numeric" onChange={(event) => onTierTargetChange(event.target.value)} />
+            <span className="text-xs text-muted-foreground">
+              The amount needed to complete this tier: item count, points, or Temple XP/KC gain.
+            </span>
           </label>
           <label className="flex flex-col gap-2 text-sm font-medium">
             Tier title
@@ -899,7 +1163,12 @@ function BoardSetupActionsCard({
             />
           </label>
         </div>
-        <Button disabled={disabled || isSaving || !selectedTile} onClick={onCreateTier}>
+        {tierNumberAlreadyExists ? (
+          <p className="rounded-lg border border-accent/50 bg-accent/10 p-3 text-sm text-muted-foreground">
+            {`Tier ${tierNumberValue} already exists on this tile. Choose the next available tier number or delete the existing tier first.`}
+          </p>
+        ) : null}
+        <Button disabled={disabled || isSaving || !canCreateTier} onClick={onCreateTier}>
           <PlusIcon data-icon="inline-start" aria-hidden="true" />
           Add Tier
         </Button>
@@ -910,38 +1179,108 @@ function BoardSetupActionsCard({
           <label className="flex flex-col gap-2 text-sm font-medium">
             Rule type
             <select
-              className="h-9 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+              className={selectControlClassName}
               value={ruleType}
               onChange={(event) => onRuleTypeChange(event.target.value)}
             >
-              <option value="item_count">item_count</option>
-              <option value="point_threshold">point_threshold</option>
-              <option value="external_competition_metric">external_competition_metric</option>
-              <option value="manual">manual</option>
+              <option value="item_count">{ruleTypeLabel("item_count")}</option>
+              <option value="point_threshold">{ruleTypeLabel("point_threshold")}</option>
+              <option value="external_competition_metric">{ruleTypeLabel("external_competition_metric")}</option>
+              <option value="manual">{ruleTypeLabel("manual")}</option>
             </select>
           </label>
           <label className="flex flex-col gap-2 text-sm font-medium">
             Scope
             <select
-              className="h-9 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+              className={selectControlClassName}
               value={ruleScope}
               onChange={(event) => onRuleScopeChange(event.target.value)}
             >
-              <option value="team">team</option>
-              <option value="player">player</option>
-              <option value="event">event</option>
+              <option value="team">{ruleScopeLabel("team")}</option>
+              <option value="player">{ruleScopeLabel("player")}</option>
+              <option value="event">{ruleScopeLabel("event")}</option>
             </select>
+            <span className="text-xs text-muted-foreground">{ruleScopeHelp(ruleScope)}</span>
           </label>
         </div>
+
         <label className="flex flex-col gap-2 text-sm font-medium">
-          Rule config JSON
-          <Textarea
-            value={ruleConfigJson}
-            className="min-h-36 font-mono text-xs"
-            onChange={(event) => onRuleConfigJsonChange(event.target.value)}
-          />
+          Rule tier
+          <select
+            className={selectControlClassName}
+            value={selectedTier?.id ?? ""}
+            disabled={!selectedTile || selectedTile.tiers.length === 0}
+            onChange={(event) => onSelectedRuleTierChange(event.target.value ? Number(event.target.value) : null)}
+          >
+            <option value="">Choose tier</option>
+            {selectedTile?.tiers.map((tier) => (
+              <option key={tier.id} value={tier.id}>
+                {tier.title ?? `Tier ${tier.tierNumber}`}
+              </option>
+            ))}
+          </select>
+          <span className="text-xs text-muted-foreground">
+            The new rule is attached to this tier. Each tier can have one active rule in this setup UI.
+          </span>
         </label>
-        <Button disabled={disabled || isSaving || !selectedTile} onClick={onCreateRule}>
+
+        <div className="flex items-center justify-between gap-3 rounded-lg border bg-background/40 p-3">
+          <div>
+            <p className="text-sm font-medium">Rule config</p>
+            <p className="text-xs text-muted-foreground">
+              {selectedTier
+                ? `Applies to ${selectedTier.title ?? `Tier ${selectedTier.tierNumber}`}.`
+                : "Create a tier before adding a rule."}
+            </p>
+          </div>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={useAdvancedRuleConfig}
+              onChange={(event) => onUseAdvancedRuleConfigChange(event.target.checked)}
+            />
+            Advanced JSON
+          </label>
+        </div>
+
+        {useAdvancedRuleConfig ? (
+          <label className="flex flex-col gap-2 text-sm font-medium">
+            Rule config JSON
+            <Textarea
+              value={ruleConfigJson}
+              className="min-h-36 font-mono text-xs"
+              onChange={(event) => onRuleConfigJsonChange(event.target.value)}
+            />
+          </label>
+        ) : (
+          <StructuredRuleFields
+            ruleType={ruleType}
+            itemActivityType={itemActivityType}
+            itemIds={itemIds}
+            duplicatesCount={duplicatesCount}
+            pointActivityType={pointActivityType}
+            pointRows={pointRows}
+            externalCompetitionId={externalCompetitionId}
+            externalMetricType={externalMetricType}
+            externalMetricKey={externalMetricKey}
+            linkedCompetitions={linkedCompetitions}
+            onItemActivityTypeChange={onItemActivityTypeChange}
+            onItemIdsChange={onItemIdsChange}
+            onDuplicatesCountChange={onDuplicatesCountChange}
+            onPointActivityTypeChange={onPointActivityTypeChange}
+            onPointRowsChange={onPointRowsChange}
+            onExternalCompetitionIdChange={onExternalCompetitionIdChange}
+            onExternalMetricTypeChange={onExternalMetricTypeChange}
+            onExternalMetricKeyChange={onExternalMetricKeyChange}
+          />
+        )}
+
+        {selectedTierHasActiveRule ? (
+          <p className="rounded-lg border border-accent/50 bg-accent/10 p-3 text-sm text-muted-foreground">
+            This tier already has an active rule. Delete the existing rule before adding another one.
+          </p>
+        ) : null}
+        <Button disabled={disabled || isSaving || !canCreateRule} onClick={onCreateRule}>
           <SaveIcon data-icon="inline-start" aria-hidden="true" />
           Create Rule
         </Button>
@@ -951,12 +1290,229 @@ function BoardSetupActionsCard({
   )
 }
 
+function StructuredRuleFields({
+  ruleType,
+  itemActivityType,
+  itemIds,
+  duplicatesCount,
+  pointActivityType,
+  pointRows,
+  externalCompetitionId,
+  externalMetricType,
+  externalMetricKey,
+  linkedCompetitions,
+  onItemActivityTypeChange,
+  onItemIdsChange,
+  onDuplicatesCountChange,
+  onPointActivityTypeChange,
+  onPointRowsChange,
+  onExternalCompetitionIdChange,
+  onExternalMetricTypeChange,
+  onExternalMetricKeyChange,
+}: {
+  ruleType: string
+  itemActivityType: string
+  itemIds: string
+  duplicatesCount: boolean
+  pointActivityType: string
+  pointRows: string
+  externalCompetitionId: string
+  externalMetricType: string
+  externalMetricKey: string
+  linkedCompetitions: AdminExternalCompetition[]
+  onItemActivityTypeChange: (value: string) => void
+  onItemIdsChange: (value: string) => void
+  onDuplicatesCountChange: (value: boolean) => void
+  onPointActivityTypeChange: (value: string) => void
+  onPointRowsChange: (value: string) => void
+  onExternalCompetitionIdChange: (value: string) => void
+  onExternalMetricTypeChange: (value: string) => void
+  onExternalMetricKeyChange: (value: string) => void
+}) {
+  if (ruleType === "point_threshold") {
+    return (
+      <div className="grid gap-3 rounded-lg border bg-background/40 p-3">
+        <label className="flex flex-col gap-2 text-sm font-medium">
+          Activity type
+          <ActivityTypeSelect value={pointActivityType} onChange={onPointActivityTypeChange} />
+        </label>
+        <PointRowsEditor value={pointRows} onChange={onPointRowsChange} />
+      </div>
+    )
+  }
+
+  if (ruleType === "external_competition_metric") {
+    return (
+      <div className="grid gap-3 rounded-lg border bg-background/40 p-3 sm:grid-cols-3">
+        <label className="flex flex-col gap-2 text-sm font-medium">
+          Temple link
+          <select
+            className={selectControlClassName}
+            value={externalCompetitionId}
+            onChange={(event) => onExternalCompetitionIdChange(event.target.value)}
+          >
+            <option value="">Select link</option>
+            {linkedCompetitions.map((competition) => (
+              <option key={competition.id} value={competition.id}>
+                {competition.name} ({competition.externalId})
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-2 text-sm font-medium">
+          Metric type
+          <Input value={externalMetricType} onChange={(event) => onExternalMetricTypeChange(event.target.value)} />
+        </label>
+        <label className="flex flex-col gap-2 text-sm font-medium">
+          Metric key
+          <Input value={externalMetricKey} onChange={(event) => onExternalMetricKeyChange(event.target.value)} />
+        </label>
+      </div>
+    )
+  }
+
+  if (ruleType === "manual") {
+    return (
+      <div className="rounded-lg border bg-background/40 p-3 text-sm text-muted-foreground">
+        Manual rules only need a tier target for this MVP setup.
+      </div>
+    )
+  }
+
+  return (
+    <div className="grid gap-3 rounded-lg border bg-background/40 p-3">
+      <label className="flex flex-col gap-2 text-sm font-medium">
+        Activity type
+        <ActivityTypeSelect value={itemActivityType} onChange={onItemActivityTypeChange} />
+      </label>
+      <label className="flex flex-col gap-2 text-sm font-medium">
+        Item IDs
+        <Input
+          value={itemIds}
+          placeholder="22486, 20784"
+          onChange={(event) => onItemIdsChange(event.target.value)}
+        />
+        <span className="text-xs text-muted-foreground">Comma, space, or newline separated OSRS item IDs.</span>
+      </label>
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={duplicatesCount}
+          onChange={(event) => onDuplicatesCountChange(event.target.checked)}
+        />
+        Count duplicate item drops
+      </label>
+    </div>
+  )
+}
+
+function ActivityTypeSelect({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (value: string) => void
+}) {
+  return (
+    <select
+      className={selectControlClassName}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+    >
+      {activityTypeOptions.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+  )
+}
+
+function PointRowsEditor({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (value: string) => void
+}) {
+  const rows = parseEditablePointRows(value)
+
+  function updateRow(index: number, field: "itemId" | "points", nextValue: string) {
+    const nextRows = rows.map((row, rowIndex) =>
+      rowIndex === index ? { ...row, [field]: nextValue } : row,
+    )
+    onChange(serializeEditablePointRows(nextRows))
+  }
+
+  function addRow() {
+    onChange(serializeEditablePointRows([...rows, { itemId: "", points: "" }]))
+  }
+
+  function removeRow(index: number) {
+    const nextRows = rows.filter((_, rowIndex) => rowIndex !== index)
+    onChange(serializeEditablePointRows(nextRows.length > 0 ? nextRows : [{ itemId: "", points: "" }]))
+  }
+
+  return (
+    <div className="flex flex-col gap-2 text-sm font-medium">
+      Item points
+      <div className="grid gap-2">
+        {rows.map((row, index) => (
+          <div key={index} className="grid grid-cols-[1fr_0.8fr_auto] gap-2">
+            <Input
+              value={row.itemId}
+              inputMode="numeric"
+              placeholder="Item ID"
+              aria-label={`Item ID ${index + 1}`}
+              onChange={(event) => updateRow(index, "itemId", event.target.value)}
+            />
+            <Input
+              value={row.points}
+              inputMode="decimal"
+              placeholder="Points"
+              aria-label={`Points ${index + 1}`}
+              onChange={(event) => updateRow(index, "points", event.target.value)}
+            />
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              aria-label={`Remove item point row ${index + 1}`}
+              disabled={rows.length === 1}
+              onClick={() => removeRow(index)}
+            >
+              <Trash2Icon className="size-4" aria-hidden="true" />
+            </Button>
+          </div>
+        ))}
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-xs text-muted-foreground">
+          Each row maps an OSRS item ID to the points it should award.
+        </span>
+        <Button type="button" size="sm" variant="outline" onClick={addRow}>
+          <PlusIcon data-icon="inline-start" aria-hidden="true" />
+          Add item
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 function BoardSetupSummaryCard({
   boardName,
   tiles,
+  isDeleting,
+  onDeleteTile,
+  onDeleteTier,
+  onDeleteRule,
 }: {
   boardName: string | null
   tiles: AdminBingoTile[]
+  isDeleting: boolean
+  onDeleteTile: (tile: AdminBingoTile) => void
+  onDeleteTier: (tile: AdminBingoTile, tierId: number) => void
+  onDeleteRule: (tile: AdminBingoTile, ruleId: number) => void
 }) {
   if (!boardName) {
     return <StateCard title="No board yet" detail="Create a board, then add tiles, tiers, and rules." />
@@ -977,26 +1533,75 @@ function BoardSetupSummaryCard({
               {index > 0 ? <Separator /> : null}
               <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-start">
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">{tile.title}</p>
+                  <div className="flex min-w-0 items-center gap-2">
+                    <p className="truncate text-sm font-medium">{tile.title}</p>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      aria-label={`Delete ${tile.title}`}
+                      disabled={isDeleting}
+                      onClick={() => {
+                        if (window.confirm(`Delete tile "${tile.title}" and its tiers/rules?`)) {
+                          onDeleteTile(tile)
+                        }
+                      }}
+                    >
+                      <Trash2Icon className="size-4" aria-hidden="true" />
+                    </Button>
+                  </div>
                   <p className="text-xs text-muted-foreground">
                     {tile.tiers.length} tier(s) · {tile.rules.length} rule(s)
                   </p>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {tile.tiers.map((tier) => (
-                      <Badge key={tier.id} variant="outline">
+                      <span key={tier.id} className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs">
                         {tier.title ?? `Tier ${tier.tierNumber}`}
-                      </Badge>
+                        <button
+                          type="button"
+                          className="rounded-sm p-0.5 text-muted-foreground hover:text-destructive"
+                          disabled={isDeleting}
+                          aria-label={`Delete ${tier.title ?? `Tier ${tier.tierNumber}`}`}
+                          onClick={() => {
+                            if (window.confirm(`Delete ${tier.title ?? `Tier ${tier.tierNumber}`}?`)) {
+                              onDeleteTier(tile, tier.id)
+                            }
+                          }}
+                        >
+                          <Trash2Icon className="size-3" aria-hidden="true" />
+                        </button>
+                      </span>
                     ))}
                   </div>
+                  {tile.rules.length > 0 ? (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Progress appears on public/team pages after matching activity is processed. Check event window,
+                      team assignment, and item IDs if it stays at zero.
+                    </p>
+                  ) : null}
                 </div>
-                <div className="flex flex-col gap-1 text-xs text-muted-foreground">
+                <div className="flex flex-col gap-2 text-xs text-muted-foreground">
                   {tile.rules.length === 0 ? (
                     <span>No rules</span>
                   ) : (
                     tile.rules.map((rule: AdminTileRule) => (
-                      <span key={rule.id}>
-                        {rule.ruleType} · {rule.scope}
-                      </span>
+                      <div key={rule.id} className="flex items-center justify-between gap-2 rounded-md border bg-background/50 px-2 py-1.5">
+                        <span className="min-w-0 truncate">
+                          {ruleTypeLabel(rule.ruleType)} · {ruleScopeLabel(rule.scope)}
+                        </span>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          aria-label={`Delete ${rule.ruleType} rule`}
+                          disabled={isDeleting}
+                          onClick={() => {
+                            if (window.confirm(`Delete ${rule.ruleType} rule?`)) {
+                              onDeleteRule(tile, rule.id)
+                            }
+                          }}
+                        >
+                          <Trash2Icon className="size-3.5" aria-hidden="true" />
+                        </Button>
+                      </div>
                     ))
                   )}
                 </div>
@@ -1063,7 +1668,7 @@ function TempleDiagnosticsCard({
       <CardContent className="flex flex-col gap-4">
         <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-center">
           <select
-            className="h-9 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            className={selectControlClassName}
             value={selectedCompetition.id}
             onChange={(event) => onSelectCompetition(Number(event.target.value))}
           >
@@ -1240,14 +1845,203 @@ function formatNullableTime(value: string | null) {
   return value ? formatTimestamp(value) : "Never"
 }
 
-function selectedTileTierId(tiles: AdminBingoTile[], selectedTileId: number | null) {
+function selectedTileTierId(
+  tiles: AdminBingoTile[],
+  selectedTileId: number | null,
+  selectedRuleTierId: number | null,
+) {
   const tile = tiles.find((candidate) => candidate.id === selectedTileId) ?? tiles[0]
-  return tile?.tiers[0]?.id ?? null
+  return tile?.tiers.find((tier) => tier.id === selectedRuleTierId)?.id ?? tile?.tiers[0]?.id ?? null
 }
 
 function numberOrDefault(value: string, fallback: number) {
   const parsed = Number(value)
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
+type BuildRuleConfigInput = {
+  ruleType: string
+  useAdvancedRuleConfig: boolean
+  ruleConfigJson: string
+  tierTarget: string
+  itemActivityType: string
+  itemIds: string
+  duplicatesCount: boolean
+  pointActivityType: string
+  pointRows: string
+  externalCompetitionId: string
+  externalMetricType: string
+  externalMetricKey: string
+}
+
+function buildRuleConfigJson(input: BuildRuleConfigInput) {
+  if (input.useAdvancedRuleConfig) {
+    try {
+      const parsed = JSON.parse(input.ruleConfigJson) as unknown
+      if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") {
+        throw new Error("Rule config must be a JSON object.")
+      }
+
+      return JSON.stringify(parsed, null, 2)
+    } catch (error) {
+      throw new Error(errorText(error), { cause: error })
+    }
+  }
+
+  const requiredValue = positiveNumber(input.tierTarget, "Tier target")
+
+  if (input.ruleType === "point_threshold") {
+    return JSON.stringify(
+      {
+        activityType: requiredString(input.pointActivityType, "Activity type"),
+        pointsTable: parsePointRows(input.pointRows),
+        requiredValue,
+      },
+      null,
+      2,
+    )
+  }
+
+  if (input.ruleType === "external_competition_metric") {
+    return JSON.stringify(
+      {
+        provider: "templeosrs",
+        externalCompetitionId: positiveInteger(input.externalCompetitionId, "Temple link"),
+        metricType: requiredString(input.externalMetricType, "Metric type"),
+        metricKey: requiredString(input.externalMetricKey, "Metric key"),
+        requiredValue,
+      },
+      null,
+      2,
+    )
+  }
+
+  if (input.ruleType === "manual") {
+    return JSON.stringify({ requiredValue }, null, 2)
+  }
+
+  return JSON.stringify(
+    {
+      activityType: requiredString(input.itemActivityType, "Activity type"),
+      itemIds: parseItemIds(input.itemIds),
+      requiredValue,
+      duplicatesCount: input.duplicatesCount,
+    },
+    null,
+    2,
+  )
+}
+
+function positiveNumber(value: string, label: string) {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error(`${label} must be greater than zero.`)
+  }
+
+  return parsed
+}
+
+function positiveInteger(value: string, label: string) {
+  const parsed = Number(value)
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error(`${label} is required.`)
+  }
+
+  return parsed
+}
+
+function requiredString(value: string, label: string) {
+  const trimmed = value.trim()
+  if (!trimmed) {
+    throw new Error(`${label} is required.`)
+  }
+
+  return trimmed
+}
+
+function parseItemIds(value: string) {
+  const ids = value
+    .split(/[\s,;]+/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => positiveInteger(part, "Item ID"))
+
+  if (ids.length === 0) {
+    throw new Error("At least one item ID is required.")
+  }
+
+  return ids
+}
+
+function parsePointRows(value: string) {
+  const rows = value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [itemId, points] = line.split(/[\s,;:]+/)
+      return {
+        itemId: positiveInteger(itemId ?? "", "Item ID"),
+        points: positiveNumber(points ?? "", "Points"),
+      }
+    })
+
+  if (rows.length === 0) {
+    throw new Error("At least one item point row is required.")
+  }
+
+  return rows
+}
+
+function parseEditablePointRows(value: string) {
+  const rows = value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [itemId, points] = line.split(/[\s,;:]+/)
+      return {
+        itemId: itemId ?? "",
+        points: points ?? "",
+      }
+    })
+
+  return rows.length > 0 ? rows : [{ itemId: "", points: "" }]
+}
+
+function serializeEditablePointRows(rows: { itemId: string; points: string }[]) {
+  return rows.map((row) => `${row.itemId.trim()},${row.points.trim()}`).join("\n")
+}
+
+function ruleTypeLabel(ruleType: string) {
+  const labels: Record<string, string> = {
+    item_count: "Item count",
+    point_threshold: "Point threshold",
+    external_competition_metric: "Temple metric",
+    manual: "Manual",
+  }
+
+  return labels[ruleType] ?? ruleType
+}
+
+function ruleScopeLabel(scope: string) {
+  const labels: Record<string, string> = {
+    team: "Team scoring",
+    player: "Player scoring",
+    event: "Whole event",
+  }
+
+  return labels[scope] ?? scope
+}
+
+function ruleScopeHelp(scope: string) {
+  const help: Record<string, string> = {
+    team: "Use this for normal team bingo tiles. Progress is tracked separately for each team.",
+    player: "Use this only for individual-player scoring. Team assignment is ignored.",
+    event: "Use this for one event-wide total shared by everyone.",
+  }
+
+  return help[scope] ?? "Choose how the rule should group progress."
 }
 
 function defaultRuleConfig(ruleType: string, target: string, externalCompetitionId?: number) {

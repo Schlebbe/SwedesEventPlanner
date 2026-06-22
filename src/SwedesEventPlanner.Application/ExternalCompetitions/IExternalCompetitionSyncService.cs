@@ -23,6 +23,8 @@ public interface IExternalCompetitionSyncService
         string eventSlug,
         CancellationToken cancellationToken);
 
+    Task<int> SyncDueActiveCompetitionsAsync(CancellationToken cancellationToken);
+
     Task<AdminExternalCompetitionSyncRunListResponse> ListSyncRunsAsync(
         long externalCompetitionId,
         CancellationToken cancellationToken);

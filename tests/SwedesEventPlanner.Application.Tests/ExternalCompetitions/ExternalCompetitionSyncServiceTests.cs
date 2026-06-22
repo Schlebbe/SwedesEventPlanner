@@ -240,6 +240,26 @@ public sealed class ExternalCompetitionSyncServiceTests
     }
 
     [Fact]
+    public async Task Link_competition_allows_same_temple_id_on_multiple_events()
+    {
+        await using var dbContext = CreateDbContext();
+        var firstFixture = await SeedEventAsync(dbContext);
+        var secondFixture = await SeedEventAsync(dbContext);
+        var client = new FakeTempleClient(IndividualInfo([]));
+        var service = CreateService(dbContext, client);
+
+        var firstCompetition = await LinkCompetitionAsync(service, firstFixture);
+        var secondCompetition = await LinkCompetitionAsync(service, secondFixture);
+
+        Assert.NotEqual(firstCompetition.Id, secondCompetition.Id);
+        Assert.Equal(
+            2,
+            await dbContext.ExternalCompetitions.CountAsync(competition =>
+                competition.Provider == ExternalCompetitionProviders.TempleOsrs &&
+                competition.ExternalId == "123"));
+    }
+
+    [Fact]
     public async Task Event_reading_uses_cached_progress_without_calling_temple()
     {
         await using var dbContext = CreateDbContext();

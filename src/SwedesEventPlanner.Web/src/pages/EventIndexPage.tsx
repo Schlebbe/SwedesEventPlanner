@@ -24,6 +24,7 @@ export function EventIndexPage() {
     queryKey: ["events"],
     queryFn: ({ signal }) => listEvents(signal),
     retry: false,
+    refetchInterval: 10000,
   })
 
   const events = eventsQuery.data ?? []

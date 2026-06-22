@@ -33,7 +33,7 @@ describe("App", () => {
     expect(await screen.findByText("Manual Bingo 2026")).toBeInTheDocument()
   })
 
-  it("renders the event page with board progress and contributions", async () => {
+  it("renders the event overview with team cards and contributions", async () => {
     stubFetch({
       "/api/events/manual-bingo-2026": eventSummary,
       "/api/events/manual-bingo-2026/board": {
@@ -97,6 +97,7 @@ describe("App", () => {
             },
           ],
         },
+        externalCompetitionFreshness: [],
       },
       "/api/events/manual-bingo-2026/teams": {
         event: eventSummary,
@@ -135,8 +136,83 @@ describe("App", () => {
     expect(
       await screen.findByRole("heading", { name: "Manual Bingo 2026" }),
     ).toBeInTheDocument()
-    expect(await screen.findByText("TOB Tier 1")).toBeInTheDocument()
+    expect(await screen.findByRole("link", { name: "Open Team Board" })).toBeInTheDocument()
     expect(await screen.findByText(/Sebbe added/)).toBeInTheDocument()
+  })
+
+  it("renders the team board with tile progress", async () => {
+    stubFetch({
+      "/api/events/manual-bingo-2026/teams/1/board": {
+        event: eventSummary,
+        team: {
+          id: 1,
+          name: "Blue",
+          score: 0,
+          scoredTiers: 0,
+          completedTiles: 0,
+          currentValue: 7,
+        },
+        board: {
+          id: 1,
+          name: "Demo Board",
+          rows: null,
+          columns: null,
+          tiles: [
+            {
+              id: 1,
+              title: "TOB",
+              description: "Earn Theatre of Blood points.",
+              positionX: null,
+              positionY: null,
+              sortOrder: 1,
+              teamProgress: [
+                {
+                  teamId: 1,
+                  teamName: "Blue",
+                  currentValue: 7,
+                  currentTier: 0,
+                  isCompleted: false,
+                  completedAt: null,
+                },
+              ],
+              tiers: [
+                {
+                  id: 1,
+                  tierNumber: 1,
+                  title: "TOB Tier 1",
+                  description: null,
+                  scoreValue: 1,
+                  isRequiredForBoardCompletion: true,
+                  requiredValue: 10,
+                  teamProgress: [
+                    {
+                      teamId: 1,
+                      teamName: "Blue",
+                      currentValue: 7,
+                      isAchieved: false,
+                      achievedAt: null,
+                      isScored: false,
+                      scoredAt: null,
+                      scoreAwarded: 0,
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+        externalCompetitionFreshness: [],
+      },
+      "/api/events/manual-bingo-2026/contributions": {
+        event: eventSummary,
+        contributions: [],
+      },
+    })
+
+    renderApp("/events/manual-bingo-2026/teams/1")
+
+    expect(await screen.findByRole("heading", { name: "Blue Board" })).toBeInTheDocument()
+    expect(await screen.findByText("TOB Tier 1")).toBeInTheDocument()
   })
 })
 

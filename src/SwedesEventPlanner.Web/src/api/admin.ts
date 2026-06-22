@@ -65,6 +65,7 @@ export type AdminEventParticipantListResponse = {
   event: AdminEventSetupSummary
   teams: AdminEventTeam[]
   participants: AdminEventParticipant[]
+  teamGroups: AdminEventTeamRoster[]
   unassignedCount: number
 }
 
@@ -84,6 +85,14 @@ export type AdminEventParticipant = {
   status: string
   joinedAt: string
   isUnassigned: boolean
+}
+
+export type AdminEventTeamRoster = {
+  teamId: number | null
+  teamName: string
+  isUnassigned: boolean
+  participantCount: number
+  participants: AdminEventParticipant[]
 }
 
 export type AdminExternalCompetition = {
@@ -413,6 +422,42 @@ export async function createTileRule(
   )
 }
 
+export async function deleteBingoTile(
+  eventSlug: string,
+  tileId: number,
+  adminToken: string,
+): Promise<void> {
+  await fetchAdminNoContent(`/api/admin/events/${eventSlug}/tiles/${tileId}`, adminToken, {
+    method: "DELETE",
+  })
+}
+
+export async function deleteBingoTileTier(
+  eventSlug: string,
+  tileId: number,
+  tileTierId: number,
+  adminToken: string,
+): Promise<void> {
+  await fetchAdminNoContent(
+    `/api/admin/events/${eventSlug}/tiles/${tileId}/tiers/${tileTierId}`,
+    adminToken,
+    { method: "DELETE" },
+  )
+}
+
+export async function deleteTileRule(
+  eventSlug: string,
+  tileId: number,
+  ruleId: number,
+  adminToken: string,
+): Promise<void> {
+  await fetchAdminNoContent(
+    `/api/admin/events/${eventSlug}/tiles/${tileId}/rules/${ruleId}`,
+    adminToken,
+    { method: "DELETE" },
+  )
+}
+
 export async function linkTempleCompetition(
   eventSlug: string,
   externalId: string,
@@ -524,6 +569,25 @@ async function fetchAdminJson<T>(
   }
 
   return (await response.json()) as T
+}
+
+async function fetchAdminNoContent(
+  url: string,
+  adminToken: string,
+  init: RequestInit = {},
+): Promise<void> {
+  const headers = new Headers(init.headers)
+  headers.set("X-Admin-Token", adminToken)
+
+  const response = await fetch(url, {
+    ...init,
+    headers,
+  })
+
+  if (!response.ok) {
+    const problem = await readProblem(response)
+    throw new Error(problem ?? `${url} request failed with ${response.status}`)
+  }
 }
 
 async function readProblem(response: Response) {

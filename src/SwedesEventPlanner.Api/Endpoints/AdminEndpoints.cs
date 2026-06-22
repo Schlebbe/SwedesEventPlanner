@@ -363,6 +363,50 @@ public static class AdminEndpoints
         .Produces(StatusCodes.Status404NotFound)
         .ProducesProblem(StatusCodes.Status400BadRequest);
 
+        group.MapDelete("/events/{eventSlug}/tiles/{tileId:long}", async Task<Results<NoContent, NotFound>> (
+            string eventSlug,
+            long tileId,
+            IAdminEventSetupService setupService,
+            CancellationToken cancellationToken) =>
+        {
+            var deleted = await setupService.DeleteTileAsync(eventSlug, tileId, cancellationToken);
+            return deleted ? TypedResults.NoContent() : TypedResults.NotFound();
+        })
+        .WithName("DeleteAdminBingoTile")
+        .WithSummary("Delete a bingo tile and its setup/progress rows.")
+        .Produces(StatusCodes.Status204NoContent)
+        .Produces(StatusCodes.Status404NotFound);
+
+        group.MapDelete("/events/{eventSlug}/tiles/{tileId:long}/tiers/{tileTierId:long}", async Task<Results<NoContent, NotFound>> (
+            string eventSlug,
+            long tileId,
+            long tileTierId,
+            IAdminEventSetupService setupService,
+            CancellationToken cancellationToken) =>
+        {
+            var deleted = await setupService.DeleteTileTierAsync(eventSlug, tileId, tileTierId, cancellationToken);
+            return deleted ? TypedResults.NoContent() : TypedResults.NotFound();
+        })
+        .WithName("DeleteAdminBingoTileTier")
+        .WithSummary("Delete a bingo tile tier and its setup/progress rows.")
+        .Produces(StatusCodes.Status204NoContent)
+        .Produces(StatusCodes.Status404NotFound);
+
+        group.MapDelete("/events/{eventSlug}/tiles/{tileId:long}/rules/{ruleId:long}", async Task<Results<NoContent, NotFound>> (
+            string eventSlug,
+            long tileId,
+            long ruleId,
+            IAdminEventSetupService setupService,
+            CancellationToken cancellationToken) =>
+        {
+            var deleted = await setupService.DeleteTileRuleAsync(eventSlug, tileId, ruleId, cancellationToken);
+            return deleted ? TypedResults.NoContent() : TypedResults.NotFound();
+        })
+        .WithName("DeleteAdminTileRule")
+        .WithSummary("Delete a tile rule.")
+        .Produces(StatusCodes.Status204NoContent)
+        .Produces(StatusCodes.Status404NotFound);
+
         group.MapPost("/events/{eventSlug}/external-competitions/templeosrs", async Task<Results<Created<AdminExternalCompetitionResponse>, NotFound, ProblemHttpResult>> (
             string eventSlug,
             LinkExternalCompetitionRequest request,

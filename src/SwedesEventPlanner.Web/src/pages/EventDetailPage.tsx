@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { useParams } from "react-router-dom"
+import { Link, useParams } from "react-router-dom"
 import {
   getEvent,
   getEventBoard,
@@ -8,11 +8,11 @@ import {
   getEventTeams,
   requestTempleRefresh,
   type EventExternalCompetitionFreshness,
+  type EventTeamSummary,
   type EventTempleRefreshResponse,
 } from "@/api/events"
 import {
   AppFrame,
-  BoardTileCard,
   BrandBlock,
   ContributionFeed,
   EventHero,
@@ -42,24 +42,28 @@ export function EventDetailPage() {
     queryFn: ({ signal }) => getEvent(slug, signal),
     enabled: slug.length > 0,
     retry: false,
+    refetchInterval: 10000,
   })
   const boardQuery = useQuery({
     queryKey: ["event-board", slug],
     queryFn: ({ signal }) => getEventBoard(slug, signal),
     enabled: slug.length > 0,
     retry: false,
+    refetchInterval: 10000,
   })
   const teamsQuery = useQuery({
     queryKey: ["event-teams", slug],
     queryFn: ({ signal }) => getEventTeams(slug, signal),
     enabled: slug.length > 0,
     retry: false,
+    refetchInterval: 5000,
   })
   const contributionsQuery = useQuery({
     queryKey: ["event-contributions", slug],
     queryFn: ({ signal }) => getEventContributions(slug, signal),
     enabled: slug.length > 0,
     retry: false,
+    refetchInterval: 5000,
   })
 
   const event = eventQuery.data ?? boardQuery.data?.event ?? teamsQuery.data?.event
@@ -73,7 +77,6 @@ export function EventDetailPage() {
       [],
     [boardQuery.data?.teams, teamsQuery.data?.teams],
   )
-  const board = boardQuery.data?.board
   const externalFreshness = boardQuery.data?.externalCompetitionFreshness ?? []
   const contributions = contributionsQuery.data?.contributions ?? []
   const templeRefreshMutation = useMutation({
@@ -118,19 +121,21 @@ export function EventDetailPage() {
       <section className="grid gap-4 xl:grid-cols-[1fr_0.42fr]">
         <div className="flex flex-col gap-4">
           <SectionHeading
-            title={board?.name ?? "Board"}
-            description="Team progress across tiles and tiers"
+            title="Teams"
+            description="Open a team board to inspect tile and tier progress"
           />
-          {boardQuery.isLoading ? (
-            <StateCard title="Loading board" detail="Reading current progress." />
-          ) : board ? (
+          {teamsQuery.isLoading ? (
+            <StateCard title="Loading teams" detail="Reading current standings." />
+          ) : teamsQuery.isError ? (
+            <StateCard title="Teams unavailable" detail="The team standings could not be loaded." />
+          ) : teams.length > 0 ? (
             <div className="grid gap-3 md:grid-cols-2">
-              {board.tiles.map((tile) => (
-                <BoardTileCard key={tile.id} tile={tile} teams={teams} />
+              {teams.map((team, index) => (
+                <TeamOverviewCard key={team.id} eventSlug={event.slug} team={team} rank={index + 1} />
               ))}
             </div>
           ) : (
-            <StateCard title="Board unavailable" detail="No board has been created for this event yet." />
+            <StateCard title="No teams yet" detail="Teams will appear after they are created in admin setup." />
           )}
         </div>
 
@@ -157,7 +162,50 @@ export function EventDetailPage() {
   )
 }
 
-function ExternalFreshnessCard({
+function TeamOverviewCard({
+  eventSlug,
+  team,
+  rank,
+}: {
+  eventSlug: string
+  team: EventTeamSummary
+  rank: number
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <CardTitle className="truncate">{team.name}</CardTitle>
+            <CardDescription>Rank {rank} · {team.contributionCount} contribution(s)</CardDescription>
+          </div>
+          <Badge>{team.score} pts</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid grid-cols-3 gap-2 text-sm">
+          <Metric label="Scored tiers" value={team.scoredTiers.toString()} />
+          <Metric label="Completed tiles" value={team.completedTiles.toString()} />
+          <Metric label="Progress total" value={team.currentValue.toString()} />
+        </div>
+        <Button asChild variant="outline">
+          <Link to={`/events/${eventSlug}/teams/${team.id}`}>Open Team Board</Link>
+        </Button>
+      </CardContent>
+    </Card>
+  )
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border bg-background/40 p-2">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="text-sm font-medium tabular-nums">{value}</p>
+    </div>
+  )
+}
+
+export function ExternalFreshnessCard({
   freshness,
 }: {
   freshness: EventExternalCompetitionFreshness[]
@@ -196,7 +244,7 @@ function ExternalFreshnessCard({
   )
 }
 
-function ExternalRefreshCard({
+export function ExternalRefreshCard({
   freshness,
   isRefreshing,
   refreshResult,

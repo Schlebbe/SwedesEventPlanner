@@ -231,6 +231,57 @@ public sealed class EventReadService(EventPlannerDbContext dbContext) : IEventRe
         return new EventTeamListResponse(eventSummary, teams);
     }
 
+    public async Task<EventTeamBoardResponse?> GetTeamBoardAsync(
+        string slug,
+        long teamId,
+        CancellationToken cancellationToken)
+    {
+        var board = await GetBoardAsync(slug, cancellationToken);
+        if (board is null)
+        {
+            return null;
+        }
+
+        var team = board.Teams.SingleOrDefault(candidate => candidate.Id == teamId);
+        if (team is null)
+        {
+            return null;
+        }
+
+        var teamTiles = board.Board.Tiles
+            .Select(tile => new BoardTileResponse(
+                tile.Id,
+                tile.Title,
+                tile.Description,
+                tile.PositionX,
+                tile.PositionY,
+                tile.SortOrder,
+                tile.TeamProgress.Where(progress => progress.TeamId == teamId).ToList(),
+                tile.Tiers
+                    .Select(tier => new BoardTileTierResponse(
+                        tier.Id,
+                        tier.TierNumber,
+                        tier.Title,
+                        tier.Description,
+                        tier.ScoreValue,
+                        tier.IsRequiredForBoardCompletion,
+                        tier.RequiredValue,
+                        tier.TeamProgress.Where(progress => progress.TeamId == teamId).ToList()))
+                    .ToList()))
+            .ToList();
+
+        return new EventTeamBoardResponse(
+            board.Event,
+            team,
+            new BoardResponse(
+                board.Board.Id,
+                board.Board.Name,
+                board.Board.Rows,
+                board.Board.Columns,
+                teamTiles),
+            board.ExternalCompetitionFreshness);
+    }
+
     public async Task<EventContributionListResponse?> GetContributionsAsync(
         string slug,
         int limit,

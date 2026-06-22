@@ -22,6 +22,8 @@ For MVP, the first provider is:
 templeosrs
 ```
 
+For local MVP testing, the same external TempleOSRS competition ID may be linked to more than one local event. Revisit this before production use so ownership, duplicate sync load, and cross-event scoring expectations are explicit.
+
 Each linked competition should store:
 
 ```text

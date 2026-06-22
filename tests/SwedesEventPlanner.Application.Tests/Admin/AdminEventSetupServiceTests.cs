@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using SwedesEventPlanner.Application.Admin;
 using SwedesEventPlanner.Contracts.Admin;
 using SwedesEventPlanner.Domain.Events;
 using SwedesEventPlanner.Domain.Players;
@@ -131,6 +132,10 @@ public sealed class AdminEventSetupServiceTests
         var beforeAssignment = await service.ListParticipantsAsync(EventSlug, CancellationToken.None);
         Assert.NotNull(beforeAssignment);
         Assert.Equal(1, beforeAssignment.UnassignedCount);
+        var unassignedGroup = Assert.Single(beforeAssignment.TeamGroups);
+        Assert.True(unassignedGroup.IsUnassigned);
+        Assert.Equal("Unassigned", unassignedGroup.TeamName);
+        Assert.Equal(1, unassignedGroup.ParticipantCount);
 
         var team = await service.CreateTeamAsync(
             EventSlug,
@@ -154,6 +159,11 @@ public sealed class AdminEventSetupServiceTests
         Assert.NotNull(afterAssignment);
         Assert.Equal(0, afterAssignment.UnassignedCount);
         Assert.Equal(1, Assert.Single(afterAssignment.Teams).ParticipantCount);
+        Assert.Contains(afterAssignment.TeamGroups, group =>
+            group.TeamId == team.Id &&
+            group.TeamName == "Blue" &&
+            !group.IsUnassigned &&
+            group.ParticipantCount == 1);
     }
 
     [Fact]
@@ -226,6 +236,27 @@ public sealed class AdminEventSetupServiceTests
         Assert.Equal("Scythe Drop", setupTile.Title);
         Assert.Single(setupTile.Tiers);
         Assert.Single(setupTile.Rules);
+
+        var duplicateRuleError = await Assert.ThrowsAsync<AdminEventSetupException>(() =>
+            service.CreateTileRuleAsync(
+                eventDefinition.Slug,
+                tile.Id,
+                new UpsertTileRuleRequest
+                {
+                    TileTierId = tier.Id,
+                    RuleType = "point_threshold",
+                    Scope = "team",
+                    ConfigJson = "{\"activityType\":\"item_drop\",\"pointsTable\":[{\"itemId\":22486,\"points\":1}],\"requiredValue\":1}"
+                },
+                CancellationToken.None));
+        Assert.Contains("already has an active rule", duplicateRuleError.Message);
+
+        Assert.True(await service.DeleteTileRuleAsync(eventDefinition.Slug, tile.Id, rule.Id, CancellationToken.None));
+        Assert.Empty(await dbContext.TileRules.ToListAsync());
+        Assert.True(await service.DeleteTileTierAsync(eventDefinition.Slug, tile.Id, tier.Id, CancellationToken.None));
+        Assert.Empty(await dbContext.BingoTileTiers.ToListAsync());
+        Assert.True(await service.DeleteTileAsync(eventDefinition.Slug, tile.Id, CancellationToken.None));
+        Assert.Empty(await dbContext.BingoTiles.ToListAsync());
     }
 
     private const string EventSlug = "summer-bingo-2026";

@@ -333,10 +333,13 @@ public sealed class AdminEventSetupService(EventPlannerDbContext dbContext) : IA
                 participant.TeamId == null))
             .ToListAsync(cancellationToken);
 
+        var teamGroups = BuildTeamGroups(teams, participants);
+
         return new AdminEventParticipantListResponse(
             MapEvent(eventDefinition),
             teams,
             participants,
+            teamGroups,
             participants.Count(participant => participant.IsUnassigned));
     }
 
@@ -599,7 +602,7 @@ public sealed class AdminEventSetupService(EventPlannerDbContext dbContext) : IA
             return null;
         }
 
-        await ValidateRuleRequestAsync(tile.Id, request, cancellationToken);
+        await ValidateRuleRequestAsync(tile.Id, request, existingRuleId: null, cancellationToken);
 
         var rule = new TileRule
         {
@@ -638,7 +641,7 @@ public sealed class AdminEventSetupService(EventPlannerDbContext dbContext) : IA
             return null;
         }
 
-        await ValidateRuleRequestAsync(tile.Id, request, cancellationToken);
+        await ValidateRuleRequestAsync(tile.Id, request, rule.Id, cancellationToken);
 
         rule.TileTierId = request.TileTierId;
         rule.RuleType = request.RuleType.Trim().ToLowerInvariant();
@@ -648,6 +651,72 @@ public sealed class AdminEventSetupService(EventPlannerDbContext dbContext) : IA
 
         await dbContext.SaveChangesAsync(cancellationToken);
         return MapRule(rule);
+    }
+
+    public async Task<bool> DeleteTileAsync(
+        string eventSlug,
+        long tileId,
+        CancellationToken cancellationToken)
+    {
+        var tile = await FindTileForEventAsync(eventSlug, tileId, cancellationToken);
+        if (tile is null)
+        {
+            return false;
+        }
+
+        dbContext.BingoTiles.Remove(tile);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
+    public async Task<bool> DeleteTileTierAsync(
+        string eventSlug,
+        long tileId,
+        long tileTierId,
+        CancellationToken cancellationToken)
+    {
+        var tile = await FindTileForEventAsync(eventSlug, tileId, cancellationToken);
+        if (tile is null)
+        {
+            return false;
+        }
+
+        var tier = await dbContext.BingoTileTiers.FirstOrDefaultAsync(
+            candidate => candidate.Id == tileTierId && candidate.TileId == tile.Id,
+            cancellationToken);
+        if (tier is null)
+        {
+            return false;
+        }
+
+        dbContext.BingoTileTiers.Remove(tier);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
+    public async Task<bool> DeleteTileRuleAsync(
+        string eventSlug,
+        long tileId,
+        long ruleId,
+        CancellationToken cancellationToken)
+    {
+        var tile = await FindTileForEventAsync(eventSlug, tileId, cancellationToken);
+        if (tile is null)
+        {
+            return false;
+        }
+
+        var rule = await dbContext.TileRules.FirstOrDefaultAsync(
+            candidate => candidate.Id == ruleId && candidate.TileId == tile.Id,
+            cancellationToken);
+        if (rule is null)
+        {
+            return false;
+        }
+
+        dbContext.TileRules.Remove(rule);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return true;
     }
 
     private async Task<EventDefinition?> FindEventAsync(string eventSlug, CancellationToken cancellationToken)
@@ -726,6 +795,7 @@ public sealed class AdminEventSetupService(EventPlannerDbContext dbContext) : IA
     private async Task ValidateRuleRequestAsync(
         long tileId,
         UpsertTileRuleRequest request,
+        long? existingRuleId,
         CancellationToken cancellationToken)
     {
         if (!AllowedRuleTypes.Contains(request.RuleType))
@@ -751,6 +821,22 @@ public sealed class AdminEventSetupService(EventPlannerDbContext dbContext) : IA
         if (!tierExists)
         {
             throw new AdminEventSetupException("Tile tier was not found for this tile.");
+        }
+
+        if (!request.IsActive)
+        {
+            return;
+        }
+
+        var tierAlreadyHasActiveRule = await dbContext.TileRules.AnyAsync(
+            rule => rule.TileTierId == request.TileTierId &&
+                rule.IsActive &&
+                (!existingRuleId.HasValue || rule.Id != existingRuleId.Value),
+            cancellationToken);
+
+        if (tierAlreadyHasActiveRule)
+        {
+            throw new AdminEventSetupException("This tier already has an active rule. Delete or deactivate the existing rule before adding another.");
         }
     }
 
@@ -778,6 +864,42 @@ public sealed class AdminEventSetupService(EventPlannerDbContext dbContext) : IA
                 team.Name,
                 dbContext.EventParticipants.Count(participant => participant.TeamId == team.Id)))
             .ToListAsync(cancellationToken);
+    }
+
+    private static IReadOnlyList<AdminEventTeamRosterResponse> BuildTeamGroups(
+        IReadOnlyList<AdminEventTeamResponse> teams,
+        IReadOnlyList<AdminEventParticipantResponse> participants)
+    {
+        var groups = teams
+            .Select(team =>
+            {
+                var teamParticipants = participants
+                    .Where(participant => participant.TeamId == team.Id)
+                    .OrderBy(participant => participant.DisplayName)
+                    .ToList();
+
+                return new AdminEventTeamRosterResponse(
+                    team.Id,
+                    team.Name,
+                    IsUnassigned: false,
+                    teamParticipants.Count,
+                    teamParticipants);
+            })
+            .ToList();
+
+        var unassigned = participants
+            .Where(participant => participant.TeamId is null)
+            .OrderBy(participant => participant.DisplayName)
+            .ToList();
+
+        groups.Add(new AdminEventTeamRosterResponse(
+            TeamId: null,
+            TeamName: "Unassigned",
+            IsUnassigned: true,
+            unassigned.Count,
+            unassigned));
+
+        return groups;
     }
 
     private static AdminEventSetupSummaryResponse MapEvent(EventDefinition eventDefinition)

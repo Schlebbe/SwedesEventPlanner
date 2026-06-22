@@ -1,5 +1,6 @@
 @baseUrl = http://localhost:5000
 @adminToken = dev-admin-token-change-me
+@eventSlug = dummy-bingo-2026
 
 ### 1. Liveness
 GET {{baseUrl}}/health
@@ -122,6 +123,8 @@ Content-Type: application/json
 }
 
 ### 8. Create item_count rule
+# MVP setup allows one active rule per tier. Use separate tiles/tiers for point_threshold
+# and external_competition_metric examples below.
 POST {{baseUrl}}/api/admin/events/{{eventSlug}}/tiles/{{tileId}}/rules
 Authorization: Bearer {{adminToken}}
 Content-Type: application/json
@@ -135,12 +138,13 @@ Content-Type: application/json
 }
 
 ### 8. Create point_threshold rule
-POST {{baseUrl}}/api/admin/events/{{eventSlug}}/tiles/{{tileId}}/rules
+# Copy a different tile id -> {{pointTileId}} and tier id -> {{pointTileTierId}} before running.
+POST {{baseUrl}}/api/admin/events/{{eventSlug}}/tiles/{{pointTileId}}/rules
 Authorization: Bearer {{adminToken}}
 Content-Type: application/json
 
 {
-  "tileTierId": {{tileTierId}},
+  "tileTierId": {{pointTileTierId}},
   "ruleType": "point_threshold",
   "scope": "team",
   "isActive": true,
@@ -148,12 +152,13 @@ Content-Type: application/json
 }
 
 ### 8. Create external_competition_metric rule
-POST {{baseUrl}}/api/admin/events/{{eventSlug}}/tiles/{{tileId}}/rules
+# Copy a different tile id -> {{externalTileId}} and tier id -> {{externalTileTierId}} before running.
+POST {{baseUrl}}/api/admin/events/{{eventSlug}}/tiles/{{externalTileId}}/rules
 Authorization: Bearer {{adminToken}}
 Content-Type: application/json
 
 {
-  "tileTierId": {{tileTierId}},
+  "tileTierId": {{externalTileTierId}},
   "ruleType": "external_competition_metric",
   "scope": "team",
   "isActive": true,
@@ -223,6 +228,9 @@ GET {{baseUrl}}/api/events/{{eventSlug}}/board
 
 ### 12. Public event teams
 GET {{baseUrl}}/api/events/{{eventSlug}}/teams
+
+### 12. Public team board
+GET {{baseUrl}}/api/events/{{eventSlug}}/teams/{{teamId}}/board
 
 ### 12. Public event contributions
 GET {{baseUrl}}/api/events/{{eventSlug}}/contributions
