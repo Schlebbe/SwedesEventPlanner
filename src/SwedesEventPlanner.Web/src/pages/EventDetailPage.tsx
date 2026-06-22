@@ -1,12 +1,14 @@
-import { useMemo } from "react"
-import { useQuery } from "@tanstack/react-query"
+import { useEffect, useMemo, useState } from "react"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useParams } from "react-router-dom"
 import {
   getEvent,
   getEventBoard,
   getEventContributions,
   getEventTeams,
+  requestTempleRefresh,
   type EventExternalCompetitionFreshness,
+  type EventTempleRefreshResponse,
 } from "@/api/events"
 import {
   AppFrame,
@@ -20,6 +22,7 @@ import {
   TopNav,
 } from "@/components/event/EventUi"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import {
   Card,
   CardContent,
@@ -32,6 +35,7 @@ import { formatEventWindow, formatTimestamp } from "@/components/event/event-for
 export function EventDetailPage() {
   const { eventSlug } = useParams()
   const slug = eventSlug ?? ""
+  const queryClient = useQueryClient()
 
   const eventQuery = useQuery({
     queryKey: ["event", slug],
@@ -72,6 +76,16 @@ export function EventDetailPage() {
   const board = boardQuery.data?.board
   const externalFreshness = boardQuery.data?.externalCompetitionFreshness ?? []
   const contributions = contributionsQuery.data?.contributions ?? []
+  const templeRefreshMutation = useMutation({
+    mutationFn: () => requestTempleRefresh(slug),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["event-board", slug] }),
+        queryClient.invalidateQueries({ queryKey: ["event-teams", slug] }),
+        queryClient.invalidateQueries({ queryKey: ["event-contributions", slug] }),
+      ])
+    },
+  })
 
   if (eventQuery.isError) {
     return (
@@ -130,6 +144,13 @@ export function EventDetailPage() {
             contributions={contributions}
           />
           <ExternalFreshnessCard freshness={externalFreshness} />
+          <ExternalRefreshCard
+            freshness={externalFreshness}
+            isRefreshing={templeRefreshMutation.isPending}
+            refreshResult={templeRefreshMutation.data ?? null}
+            error={templeRefreshMutation.error}
+            onRefresh={() => templeRefreshMutation.mutate()}
+          />
         </div>
       </section>
     </AppFrame>
@@ -168,6 +189,73 @@ function ExternalFreshnessCard({
                 {item.lastSuccessfulSyncAt ? formatTimestamp(item.lastSuccessfulSyncAt) : "Never"}
               </span>
             </div>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  )
+}
+
+function ExternalRefreshCard({
+  freshness,
+  isRefreshing,
+  refreshResult,
+  error,
+  onRefresh,
+}: {
+  freshness: EventExternalCompetitionFreshness[]
+  isRefreshing: boolean
+  refreshResult: EventTempleRefreshResponse | null
+  error: Error | null
+  onRefresh: () => void
+}) {
+  const [expiredRefreshAt, setExpiredRefreshAt] = useState<string | null>(null)
+  const nextRefreshAt = refreshResult?.competitions
+    .map((competition) => competition.nextRefreshAvailableAt)
+    .find(Boolean)
+
+  useEffect(() => {
+    if (!nextRefreshAt) {
+      return
+    }
+
+    const delayMs = Math.max(0, new Date(nextRefreshAt).getTime() - Date.now())
+    const timeoutId = window.setTimeout(() => setExpiredRefreshAt(nextRefreshAt), delayMs)
+    return () => window.clearTimeout(timeoutId)
+  }, [nextRefreshAt])
+
+  const canRefresh = !isRefreshing && (!nextRefreshAt || expiredRefreshAt === nextRefreshAt)
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Refresh Temple</CardTitle>
+        <CardDescription>Public read-only cache refresh</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <Button disabled={!canRefresh} onClick={onRefresh}>
+          {isRefreshing ? "Refreshing..." : "Refresh"}
+        </Button>
+        {freshness.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No linked TempleOSRS competition is currently visible.
+          </p>
+        ) : null}
+        {error ? <p className="text-sm text-destructive">{error.message}</p> : null}
+        {refreshResult?.competitions.map((competition) => (
+          <div key={`${competition.id}-${competition.externalId}`} className="rounded-lg border bg-background/40 p-3 text-sm">
+            <div className="flex items-center justify-between gap-3">
+              <span className="min-w-0 truncate font-medium">{competition.name}</span>
+              <Badge variant={competition.status === "succeeded" ? "default" : "secondary"}>
+                {competition.status}
+              </Badge>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">{competition.message}</p>
+            {competition.nextRefreshAvailableAt ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Next refresh {formatTimestamp(competition.nextRefreshAvailableAt)}
+              </p>
+            ) : null}
           </div>
         ))}
       </CardContent>

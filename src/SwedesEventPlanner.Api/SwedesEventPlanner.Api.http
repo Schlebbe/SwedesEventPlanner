@@ -25,6 +25,9 @@ GET {{baseUrl}}/api/events/local-mock-activity-demo/teams
 ### Public event contributions
 GET {{baseUrl}}/api/events/local-mock-activity-demo/contributions
 
+### Public read-only TempleOSRS refresh request
+POST {{baseUrl}}/api/events/local-mock-activity-demo/templeosrs/refresh
+
 ### Admin/testing status
 GET {{baseUrl}}/api/admin/status
 Authorization: Bearer {{adminToken}}
@@ -66,6 +69,22 @@ Content-Type: application/json
 
 ### Seed local mock activity demo data
 POST {{baseUrl}}/api/admin/dev/seed-mock-activity-demo
+Authorization: Bearer {{adminToken}}
+
+### Link TempleOSRS competition for an event
+POST {{baseUrl}}/api/admin/events/local-mock-activity-demo/external-competitions/templeosrs
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "externalId": "12345",
+  "name": "Local Temple Read Cache",
+  "metricType": "xp",
+  "metricKey": "overall"
+}
+
+### List linked external competitions
+GET {{baseUrl}}/api/admin/events/local-mock-activity-demo/external-competitions
 Authorization: Bearer {{adminToken}}
 
 ### Mock activity endpoint

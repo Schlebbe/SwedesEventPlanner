@@ -158,6 +158,71 @@ public sealed class ExternalCompetitionSyncServiceTests
     }
 
     [Fact]
+    public async Task Public_refresh_triggers_read_only_sync_and_sets_cooldown()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedEventAsync(dbContext);
+        var client = new FakeTempleClient(IndividualInfo([Participant("Sebbe", 100)]));
+        var service = CreateService(dbContext, client);
+        await LinkCompetitionAsync(service, fixture);
+
+        var response = await service.RequestPublicRefreshAsync(fixture.Event.Slug, CancellationToken.None);
+
+        Assert.NotNull(response);
+        var competition = Assert.Single(response.Competitions);
+        Assert.True(competition.RefreshRequested);
+        Assert.Equal(ExternalCompetitionSyncRunStatuses.Succeeded, competition.Status);
+        Assert.NotNull(competition.LastSuccessfulSyncAt);
+        Assert.True(competition.NextRefreshAvailableAt > TestNow);
+        Assert.Equal(1, client.CallCount);
+    }
+
+    [Fact]
+    public async Task Public_refresh_respects_five_minute_cooldown()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedEventAsync(dbContext);
+        var client = new FakeTempleClient(IndividualInfo([Participant("Sebbe", 100)]));
+        var service = CreateService(dbContext, client);
+        await LinkCompetitionAsync(service, fixture);
+
+        await service.RequestPublicRefreshAsync(fixture.Event.Slug, CancellationToken.None);
+        var second = await service.RequestPublicRefreshAsync(fixture.Event.Slug, CancellationToken.None);
+
+        Assert.NotNull(second);
+        var competition = Assert.Single(second.Competitions);
+        Assert.False(competition.RefreshRequested);
+        Assert.Contains("Refresh available", competition.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(1, client.CallCount);
+    }
+
+    [Fact]
+    public async Task Public_refresh_does_not_start_duplicate_active_sync()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedEventAsync(dbContext);
+        var client = new FakeTempleClient(IndividualInfo([Participant("Sebbe", 100)]));
+        var service = CreateService(dbContext, client);
+        var competition = await LinkCompetitionAsync(service, fixture);
+        dbContext.ExternalCompetitionSyncRuns.Add(new ExternalCompetitionSyncRun
+        {
+            ExternalCompetitionId = competition.Id,
+            TriggerType = "test",
+            StartedAt = TestNow,
+            Status = ExternalCompetitionSyncRunStatuses.Running
+        });
+        await dbContext.SaveChangesAsync();
+
+        var response = await service.RequestPublicRefreshAsync(fixture.Event.Slug, CancellationToken.None);
+
+        Assert.NotNull(response);
+        var refresh = Assert.Single(response.Competitions);
+        Assert.False(refresh.RefreshRequested);
+        Assert.Equal(ExternalCompetitionSyncRunStatuses.SkippedAlreadyRunning, refresh.Status);
+        Assert.Equal(0, client.CallCount);
+    }
+
+    [Fact]
     public async Task Event_reading_uses_cached_progress_without_calling_temple()
     {
         await using var dbContext = CreateDbContext();

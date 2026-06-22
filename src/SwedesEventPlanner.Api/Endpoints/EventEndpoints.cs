@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Http.HttpResults;
 using SwedesEventPlanner.Application.Events;
+using SwedesEventPlanner.Application.ExternalCompetitions;
 using SwedesEventPlanner.Contracts.Events;
 
 namespace SwedesEventPlanner.Api.Endpoints;
@@ -81,6 +82,21 @@ public static class EventEndpoints
         .WithName("GetEventContributions")
         .WithSummary("Get recent public event progress contributions.")
         .Produces<EventContributionListResponse>(StatusCodes.Status200OK)
+        .Produces(StatusCodes.Status404NotFound);
+
+        group.MapPost("/{slug}/templeosrs/refresh", async Task<Results<Ok<EventTempleRefreshResponse>, NotFound>> (
+            string slug,
+            IExternalCompetitionSyncService syncService,
+            CancellationToken cancellationToken) =>
+        {
+            var response = await syncService.RequestPublicRefreshAsync(slug, cancellationToken);
+            return response is null
+                ? TypedResults.NotFound()
+                : TypedResults.Ok(response);
+        })
+        .WithName("RequestEventTempleOsrsRefresh")
+        .WithSummary("Request a public read-only TempleOSRS refresh for an event.")
+        .Produces<EventTempleRefreshResponse>(StatusCodes.Status200OK)
         .Produces(StatusCodes.Status404NotFound);
 
         return group;

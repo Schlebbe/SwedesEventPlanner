@@ -89,6 +89,22 @@ export type EventExternalCompetitionFreshness = {
   lastSyncStatus: string | null
 }
 
+export type EventTempleRefreshResponse = {
+  event: EventSummary
+  competitions: EventTempleRefreshCompetition[]
+}
+
+export type EventTempleRefreshCompetition = {
+  id: number
+  name: string
+  externalId: string
+  status: string
+  refreshRequested: boolean
+  lastSuccessfulSyncAt: string | null
+  nextRefreshAvailableAt: string | null
+  message: string
+}
+
 export type EventTeamListResponse = {
   event: EventSummary
   teams: EventTeamSummary[]
@@ -155,6 +171,20 @@ export async function getEventContributions(
     `/api/events/${slug}/contributions`,
     signal,
   )
+}
+
+export async function requestTempleRefresh(
+  slug: string,
+): Promise<EventTempleRefreshResponse> {
+  const response = await fetch(`/api/events/${slug}/templeosrs/refresh`, {
+    method: "POST",
+  })
+
+  if (!response.ok) {
+    throw new Error(`/api/events/${slug}/templeosrs/refresh request failed with ${response.status}`)
+  }
+
+  return (await response.json()) as EventTempleRefreshResponse
 }
 
 async function fetchJson<T>(url: string, signal?: AbortSignal): Promise<T> {

@@ -6,6 +6,7 @@ using SwedesEventPlanner.Application.Admin;
 using SwedesEventPlanner.Application.Clock;
 using SwedesEventPlanner.Application.ExternalCompetitions;
 using SwedesEventPlanner.Contracts.Admin;
+using SwedesEventPlanner.Contracts.Events;
 using SwedesEventPlanner.Domain.Bingo;
 using SwedesEventPlanner.Domain.Common;
 using SwedesEventPlanner.Domain.Events;
@@ -21,6 +22,7 @@ public sealed class ExternalCompetitionSyncService(
     IClock clock,
     ILogger<ExternalCompetitionSyncService> logger) : IExternalCompetitionSyncService
 {
+    private static readonly TimeSpan PublicRefreshCooldown = TimeSpan.FromMinutes(5);
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly ConcurrentDictionary<long, SemaphoreSlim> SyncLocks = new();
 
@@ -104,6 +106,102 @@ public sealed class ExternalCompetitionSyncService(
         long externalCompetitionId,
         CancellationToken cancellationToken)
     {
+        return await SyncCompetitionAsync(
+            eventSlug,
+            externalCompetitionId,
+            triggerType: "admin",
+            cancellationToken);
+    }
+
+    public async Task<EventTempleRefreshResponse?> RequestPublicRefreshAsync(
+        string eventSlug,
+        CancellationToken cancellationToken)
+    {
+        var eventDefinition = await FindEventAsync(eventSlug, cancellationToken);
+        if (eventDefinition is null)
+        {
+            return null;
+        }
+
+        var competitions = await dbContext.ExternalCompetitions
+            .Where(competition => competition.EventId == eventDefinition.Id &&
+                competition.Provider == ExternalCompetitionProviders.TempleOsrs &&
+                competition.Status == ExternalCompetitionStatuses.Active)
+            .OrderBy(competition => competition.Name)
+            .ToListAsync(cancellationToken);
+
+        var results = new List<EventTempleRefreshCompetitionResponse>();
+        foreach (var competition in competitions)
+        {
+            var now = clock.UtcNow;
+            var nextAvailableAt = competition.NextPublicSyncAvailableAt ??
+                competition.LastPublicSyncRequestAcceptedAt?.Add(PublicRefreshCooldown);
+
+            if (nextAvailableAt.HasValue && nextAvailableAt.Value > now)
+            {
+                results.Add(MapRefreshCompetition(
+                    competition,
+                    refreshRequested: false,
+                    status: competition.LastSyncStatus ?? "cooldown",
+                    message: $"Refresh available {FormatCooldown(nextAvailableAt.Value - now)}.",
+                    nextAvailableAt));
+                continue;
+            }
+
+            var hasActiveRun = await HasActiveSyncRunAsync(competition.Id, cancellationToken);
+            if (hasActiveRun)
+            {
+                results.Add(MapRefreshCompetition(
+                    competition,
+                    refreshRequested: false,
+                    status: ExternalCompetitionSyncRunStatuses.SkippedAlreadyRunning,
+                    message: "A TempleOSRS refresh is already running.",
+                    nextAvailableAt));
+                continue;
+            }
+
+            competition.LastPublicSyncRequestAcceptedAt = now;
+            competition.NextPublicSyncAvailableAt = now.Add(PublicRefreshCooldown);
+            await dbContext.SaveChangesAsync(cancellationToken);
+
+            var run = await SyncCompetitionAsync(
+                eventSlug,
+                competition.Id,
+                triggerType: "public_refresh",
+                cancellationToken);
+
+            await dbContext.Entry(competition).ReloadAsync(cancellationToken);
+            results.Add(MapRefreshCompetition(
+                competition,
+                refreshRequested: run is not null &&
+                    run.Status != ExternalCompetitionSyncRunStatuses.SkippedAlreadyRunning,
+                status: run?.Status ?? competition.LastSyncStatus ?? "unknown",
+                message: GetPublicRefreshMessage(run),
+                competition.NextPublicSyncAvailableAt));
+        }
+
+        if (results.Count == 0)
+        {
+            results.Add(new EventTempleRefreshCompetitionResponse(
+                0,
+                "TempleOSRS",
+                string.Empty,
+                "not_configured",
+                RefreshRequested: false,
+                LastSuccessfulSyncAt: null,
+                NextRefreshAvailableAt: null,
+                "No linked TempleOSRS competitions are available for this event."));
+        }
+
+        return new EventTempleRefreshResponse(MapEventSummary(eventDefinition), results);
+    }
+
+    private async Task<AdminExternalCompetitionSyncRunResponse?> SyncCompetitionAsync(
+        string eventSlug,
+        long externalCompetitionId,
+        string triggerType,
+        CancellationToken cancellationToken)
+    {
         var eventDefinition = await FindEventAsync(eventSlug, cancellationToken);
         if (eventDefinition is null)
         {
@@ -122,29 +220,25 @@ public sealed class ExternalCompetitionSyncService(
         var gate = SyncLocks.GetOrAdd(competition.Id, _ => new SemaphoreSlim(1, 1));
         if (!await gate.WaitAsync(0, cancellationToken))
         {
-            var skipped = await CreateSkippedRunAsync(competition.Id, cancellationToken);
+            var skipped = await CreateSkippedRunAsync(competition.Id, triggerType, cancellationToken);
             return MapRun(skipped);
         }
 
         ExternalCompetitionSyncRun run;
         try
         {
-            var hasActiveRun = await dbContext.ExternalCompetitionSyncRuns.AnyAsync(
-                candidate => candidate.ExternalCompetitionId == competition.Id &&
-                    (candidate.Status == ExternalCompetitionSyncRunStatuses.Queued ||
-                        candidate.Status == ExternalCompetitionSyncRunStatuses.Running),
-                cancellationToken);
+            var hasActiveRun = await HasActiveSyncRunAsync(competition.Id, cancellationToken);
 
             if (hasActiveRun)
             {
-                var skipped = await CreateSkippedRunAsync(competition.Id, cancellationToken);
+                var skipped = await CreateSkippedRunAsync(competition.Id, triggerType, cancellationToken);
                 return MapRun(skipped);
             }
 
             run = new ExternalCompetitionSyncRun
             {
                 ExternalCompetitionId = competition.Id,
-                TriggerType = "admin",
+                TriggerType = triggerType,
                 RequestedAt = clock.UtcNow,
                 StartedAt = clock.UtcNow,
                 Status = ExternalCompetitionSyncRunStatuses.Running,
@@ -702,15 +796,27 @@ public sealed class ExternalCompetitionSyncService(
         return review;
     }
 
+    private async Task<bool> HasActiveSyncRunAsync(
+        long externalCompetitionId,
+        CancellationToken cancellationToken)
+    {
+        return await dbContext.ExternalCompetitionSyncRuns.AnyAsync(
+            candidate => candidate.ExternalCompetitionId == externalCompetitionId &&
+                (candidate.Status == ExternalCompetitionSyncRunStatuses.Queued ||
+                    candidate.Status == ExternalCompetitionSyncRunStatuses.Running),
+            cancellationToken);
+    }
+
     private async Task<ExternalCompetitionSyncRun> CreateSkippedRunAsync(
         long externalCompetitionId,
+        string triggerType,
         CancellationToken cancellationToken)
     {
         var now = clock.UtcNow;
         var run = new ExternalCompetitionSyncRun
         {
             ExternalCompetitionId = externalCompetitionId,
-            TriggerType = "admin",
+            TriggerType = triggerType,
             RequestedAt = now,
             StartedAt = now,
             CompletedAt = now,
@@ -802,6 +908,24 @@ public sealed class ExternalCompetitionSyncService(
             competition.LastSyncError);
     }
 
+    private static EventTempleRefreshCompetitionResponse MapRefreshCompetition(
+        ExternalCompetition competition,
+        bool refreshRequested,
+        string status,
+        string message,
+        DateTimeOffset? nextRefreshAvailableAt)
+    {
+        return new EventTempleRefreshCompetitionResponse(
+            competition.Id,
+            competition.Name,
+            competition.ExternalId,
+            status,
+            refreshRequested,
+            competition.LastSuccessfulSyncAt,
+            nextRefreshAvailableAt,
+            message);
+    }
+
     private static AdminExternalCompetitionSyncRunResponse MapRun(ExternalCompetitionSyncRun run)
     {
         return new AdminExternalCompetitionSyncRunResponse(
@@ -828,6 +952,39 @@ public sealed class ExternalCompetitionSyncService(
             eventDefinition.StartsAt,
             eventDefinition.EndsAt,
             eventDefinition.TimeZone);
+    }
+
+    private static EventSummaryResponse MapEventSummary(Domain.Events.EventDefinition eventDefinition)
+    {
+        return new EventSummaryResponse(
+            eventDefinition.Id,
+            eventDefinition.Slug,
+            eventDefinition.Name,
+            eventDefinition.EventType,
+            eventDefinition.Status,
+            eventDefinition.StartsAt,
+            eventDefinition.EndsAt,
+            eventDefinition.TimeZone);
+    }
+
+    private static string GetPublicRefreshMessage(AdminExternalCompetitionSyncRunResponse? run)
+    {
+        return run?.Status switch
+        {
+            ExternalCompetitionSyncRunStatuses.Succeeded => "TempleOSRS refresh completed.",
+            ExternalCompetitionSyncRunStatuses.Failed => "TempleOSRS refresh failed. Showing the last cached progress.",
+            ExternalCompetitionSyncRunStatuses.SkippedAlreadyRunning => "A TempleOSRS refresh is already running.",
+            null => "TempleOSRS refresh was not started.",
+            _ => "TempleOSRS refresh request was accepted."
+        };
+    }
+
+    private static string FormatCooldown(TimeSpan remaining)
+    {
+        var seconds = Math.Max(1, (int)Math.Ceiling(remaining.TotalSeconds));
+        return seconds >= 60
+            ? $"in {Math.Ceiling(seconds / 60m):0} minute(s)"
+            : $"in {seconds} second(s)";
     }
 
     private static string NormalizeMetric(string? value, string fallback)

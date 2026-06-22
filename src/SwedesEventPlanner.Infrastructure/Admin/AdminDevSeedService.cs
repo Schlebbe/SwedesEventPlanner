@@ -4,7 +4,9 @@ using SwedesEventPlanner.Application.Admin;
 using SwedesEventPlanner.Application.Clock;
 using SwedesEventPlanner.Contracts.Admin;
 using SwedesEventPlanner.Domain.Bingo;
+using SwedesEventPlanner.Domain.Common;
 using SwedesEventPlanner.Domain.Events;
+using SwedesEventPlanner.Domain.ExternalCompetitions;
 using SwedesEventPlanner.Domain.Players;
 using SwedesEventPlanner.Infrastructure.Persistence;
 
@@ -14,113 +16,43 @@ public sealed class AdminDevSeedService(
     EventPlannerDbContext dbContext,
     IClock clock) : IAdminDevSeedService
 {
+    private const string DemoSlug = "local-mock-activity-demo";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public async Task<AdminDevSeedResponse> SeedMockActivityDemoAsync(CancellationToken cancellationToken)
     {
         var now = clock.UtcNow;
+        var eventDefinition = await EnsureEventAsync(now, cancellationToken);
+        var blue = await EnsureTeamAsync(eventDefinition.Id, "Blue", now, cancellationToken);
+        var gold = await EnsureTeamAsync(eventDefinition.Id, "Gold", now, cancellationToken);
+        var green = await EnsureTeamAsync(eventDefinition.Id, "Green", now, cancellationToken);
 
-        var player = await dbContext.Players
-            .SingleOrDefaultAsync(candidate => candidate.RuneScapeName == "Sebbe", cancellationToken);
+        var sebbe = await EnsurePlayerAsync("Sebbe", "Sebbe", now, cancellationToken);
+        var alicia = await EnsurePlayerAsync("Alicia", "Alicia", now, cancellationToken);
+        var oskar = await EnsurePlayerAsync("Oskar", "Oskar", now, cancellationToken);
+        var linn = await EnsurePlayerAsync("Linn", "Linn", now, cancellationToken);
+        var maja = await EnsurePlayerAsync("Maja", "Maja", now, cancellationToken);
 
-        if (player is null)
-        {
-            player = new Player
-            {
-                DisplayName = "Sebbe",
-                RuneScapeName = "Sebbe",
-                CreatedAt = now
-            };
-            dbContext.Players.Add(player);
-            await dbContext.SaveChangesAsync(cancellationToken);
-        }
+        await EnsureParticipantAsync(eventDefinition.Id, sebbe.Id, blue.Id, now, cancellationToken);
+        await EnsureParticipantAsync(eventDefinition.Id, alicia.Id, blue.Id, now, cancellationToken);
+        await EnsureParticipantAsync(eventDefinition.Id, oskar.Id, gold.Id, now, cancellationToken);
+        await EnsureParticipantAsync(eventDefinition.Id, linn.Id, green.Id, now, cancellationToken);
+        await EnsureParticipantAsync(eventDefinition.Id, maja.Id, teamId: null, now, cancellationToken);
 
-        var eventDefinition = await dbContext.Events
-            .SingleOrDefaultAsync(candidate => candidate.Slug == "local-mock-activity-demo", cancellationToken);
+        var board = await EnsureBoardAsync(eventDefinition.Id, "Demo Board", now, cancellationToken);
+        var tobTile = await EnsureTileAsync(board.Id, "TOB Points", "Earn Theatre of Blood points.", 1, now, cancellationToken);
+        var petTile = await EnsureTileAsync(board.Id, "Pet Drops", "Count rare pet drops.", 2, now, cancellationToken);
+        var supplyTile = await EnsureTileAsync(board.Id, "Slayer Supplies", "Collect useful PvM supplies.", 3, now, cancellationToken);
+        var templeTile = await EnsureTileAsync(board.Id, "Temple XP", "Cached TempleOSRS XP gains.", 4, now, cancellationToken);
 
-        if (eventDefinition is null)
-        {
-            eventDefinition = new EventDefinition
-            {
-                Slug = "local-mock-activity-demo",
-                Name = "Local Mock Activity Demo",
-                EventType = "bingo",
-                Status = EventStatuses.Active,
-                StartsAt = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
-                EndsAt = new DateTimeOffset(2026, 12, 31, 23, 59, 59, TimeSpan.Zero),
-                CreatedAt = now
-            };
-            dbContext.Events.Add(eventDefinition);
-            await dbContext.SaveChangesAsync(cancellationToken);
-        }
-        else
-        {
-            eventDefinition.Status = EventStatuses.Active;
-            eventDefinition.StartsAt = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
-            eventDefinition.EndsAt = new DateTimeOffset(2026, 12, 31, 23, 59, 59, TimeSpan.Zero);
-        }
+        var tobTier = await EnsureTierAsync(tobTile.Id, 1, "10 points", scoreValue: 2, now, cancellationToken);
+        var petTier = await EnsureTierAsync(petTile.Id, 1, "First pet", scoreValue: 3, now, cancellationToken);
+        var supplyTier = await EnsureTierAsync(supplyTile.Id, 1, "25 supplies", scoreValue: 1, now, cancellationToken);
+        var templeTier = await EnsureTierAsync(templeTile.Id, 1, "1M XP", scoreValue: 2, now, cancellationToken);
 
-        var team = await dbContext.EventTeams
-            .SingleOrDefaultAsync(candidate => candidate.EventId == eventDefinition.Id && candidate.Name == "Blue", cancellationToken);
-
-        if (team is null)
-        {
-            team = new EventTeam
-            {
-                EventId = eventDefinition.Id,
-                Name = "Blue",
-                CreatedAt = now
-            };
-            dbContext.EventTeams.Add(team);
-            await dbContext.SaveChangesAsync(cancellationToken);
-        }
-
-        var participant = await dbContext.EventParticipants
-            .SingleOrDefaultAsync(
-                candidate => candidate.EventId == eventDefinition.Id && candidate.PlayerId == player.Id,
-                cancellationToken);
-
-        if (participant is null)
-        {
-            dbContext.EventParticipants.Add(new EventParticipant
-            {
-                EventId = eventDefinition.Id,
-                PlayerId = player.Id,
-                TeamId = team.Id,
-                JoinedAt = now,
-                Status = EventParticipantStatuses.Active
-            });
-        }
-        else
-        {
-            participant.TeamId = team.Id;
-            participant.Status = EventParticipantStatuses.Active;
-        }
-
-        var board = await dbContext.BingoBoards
-            .SingleOrDefaultAsync(candidate => candidate.EventId == eventDefinition.Id && candidate.Name == "Demo Board", cancellationToken);
-
-        if (board is null)
-        {
-            board = new BingoBoard
-            {
-                EventId = eventDefinition.Id,
-                Name = "Demo Board",
-                CreatedAt = now
-            };
-            dbContext.BingoBoards.Add(board);
-            await dbContext.SaveChangesAsync(cancellationToken);
-        }
-
-        var pointTile = await EnsureTileAsync(board.Id, "TOB", "Earn Theatre of Blood points.", 1, now, cancellationToken);
-        var countTile = await EnsureTileAsync(board.Id, "Pet Drops", "Count pet drops.", 2, now, cancellationToken);
-
-        var pointTier = await EnsureTierAsync(pointTile.Id, 1, "TOB Tier 1", now, cancellationToken);
-        var countTier = await EnsureTierAsync(countTile.Id, 1, "Pet Tier 1", now, cancellationToken);
-
-        await EnsureRuleAsync(
-            pointTile.Id,
-            pointTier.Id,
+        var tobRule = await EnsureRuleAsync(
+            tobTile.Id,
+            tobTier.Id,
             RuleTypes.PointThreshold,
             RuleScopes.Team,
             new
@@ -139,9 +71,9 @@ public sealed class AdminDevSeedService(
             now,
             cancellationToken);
 
-        await EnsureRuleAsync(
-            countTile.Id,
-            countTier.Id,
+        var petRule = await EnsureRuleAsync(
+            petTile.Id,
+            petTier.Id,
             RuleTypes.ItemCount,
             RuleScopes.Team,
             new
@@ -154,24 +86,204 @@ public sealed class AdminDevSeedService(
             now,
             cancellationToken);
 
+        var supplyRule = await EnsureRuleAsync(
+            supplyTile.Id,
+            supplyTier.Id,
+            RuleTypes.ItemCount,
+            RuleScopes.Team,
+            new
+            {
+                activityType = "item_drop",
+                itemGroupKey = "slayer-supplies",
+                duplicatesCount = true,
+                required = 25
+            },
+            now,
+            cancellationToken);
+
+        var templeCompetition = await EnsureTemplePlaceholderAsync(eventDefinition.Id, now, cancellationToken);
+        var templeRule = await EnsureRuleAsync(
+            templeTile.Id,
+            templeTier.Id,
+            RuleTypes.ExternalCompetitionMetric,
+            RuleScopes.Team,
+            new
+            {
+                externalCompetitionId = templeCompetition.Id,
+                provider = ExternalCompetitionProviders.TempleOsrs,
+                metricType = "xp",
+                metricKey = "overall",
+                required = 1_000_000
+            },
+            now,
+            cancellationToken);
+
+        await ResetDemoProgressAsync(eventDefinition.Id, cancellationToken);
+        await SeedProgressAsync(eventDefinition.Id, tobTile.Id, tobTier.Id, tobRule.Id, blue.Id, sebbe.Id, 7, 10, isCompleted: false, now.AddMinutes(-40), cancellationToken);
+        await SeedProgressAsync(eventDefinition.Id, tobTile.Id, tobTier.Id, tobRule.Id, gold.Id, oskar.Id, 10, 10, isCompleted: true, now.AddMinutes(-35), cancellationToken);
+        await SeedProgressAsync(eventDefinition.Id, petTile.Id, petTier.Id, petRule.Id, blue.Id, alicia.Id, 1, 1, isCompleted: true, now.AddMinutes(-30), cancellationToken);
+        await SeedProgressAsync(eventDefinition.Id, supplyTile.Id, supplyTier.Id, supplyRule.Id, green.Id, linn.Id, 12, 25, isCompleted: false, now.AddMinutes(-25), cancellationToken);
+        await SeedProgressAsync(eventDefinition.Id, templeTile.Id, templeTier.Id, templeRule.Id, blue.Id, sebbe.Id, 640_000, 1_000_000, isCompleted: false, now.AddMinutes(-20), cancellationToken);
+        await SeedProgressAsync(eventDefinition.Id, templeTile.Id, templeTier.Id, templeRule.Id, gold.Id, oskar.Id, 1_250_000, 1_000_000, isCompleted: true, now.AddMinutes(-15), cancellationToken);
+
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return new AdminDevSeedResponse(
-            player.Id,
+            sebbe.Id,
             eventDefinition.Id,
-            team.Id,
-            pointTile.Id,
-            countTile.Id,
-            player.RuneScapeName,
+            blue.Id,
+            tobTile.Id,
+            petTile.Id,
+            sebbe.RuneScapeName,
             eventDefinition.Slug,
             [
                 """
                 {"playerName":"Sebbe","activityType":"item_drop","source":"Theatre of Blood","itemId":22486,"itemName":"Scythe of vitur","quantity":1,"occurredAt":"2026-07-02T18:30:00Z","dedupeKey":"local-demo-scythe-1"}
                 """,
                 """
-                {"playerName":"Sebbe","activityType":"item_drop","source":"Pet Drop","itemId":30000,"itemName":"Tiny demo pet","quantity":1,"occurredAt":"2026-07-02T18:35:00Z","dedupeKey":"local-demo-pet-1"}
+                {"playerName":"Alicia","activityType":"item_drop","source":"Pet Drop","itemId":30000,"itemName":"Tiny demo pet","quantity":1,"occurredAt":"2026-07-02T18:35:00Z","dedupeKey":"local-demo-pet-1"}
+                """,
+                """
+                {"playerName":"Linn","activityType":"item_drop","source":"Slayer","itemId":3024,"itemName":"Super restore(4)","quantity":5,"occurredAt":"2026-07-02T18:40:00Z","dedupeKey":"local-demo-supplies-1"}
                 """
             ]);
+    }
+
+    private async Task<EventDefinition> EnsureEventAsync(DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var eventDefinition = await dbContext.Events
+            .SingleOrDefaultAsync(candidate => candidate.Slug == DemoSlug, cancellationToken);
+
+        if (eventDefinition is null)
+        {
+            eventDefinition = new EventDefinition
+            {
+                Slug = DemoSlug,
+                Name = "Local Mock Activity Demo",
+                EventType = EventTypes.Bingo,
+                Status = EventStatuses.Active,
+                StartsAt = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
+                EndsAt = new DateTimeOffset(2026, 12, 31, 23, 59, 59, TimeSpan.Zero),
+                CreatedAt = now
+            };
+            dbContext.Events.Add(eventDefinition);
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        else
+        {
+            eventDefinition.Name = "Local Mock Activity Demo";
+            eventDefinition.Status = EventStatuses.Active;
+            eventDefinition.StartsAt = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+            eventDefinition.EndsAt = new DateTimeOffset(2026, 12, 31, 23, 59, 59, TimeSpan.Zero);
+        }
+
+        return eventDefinition;
+    }
+
+    private async Task<Player> EnsurePlayerAsync(
+        string runeScapeName,
+        string displayName,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var player = await dbContext.Players
+            .SingleOrDefaultAsync(candidate => candidate.RuneScapeName == runeScapeName, cancellationToken);
+
+        if (player is not null)
+        {
+            player.DisplayName = displayName;
+            return player;
+        }
+
+        player = new Player
+        {
+            DisplayName = displayName,
+            RuneScapeName = runeScapeName,
+            CreatedAt = now
+        };
+        dbContext.Players.Add(player);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return player;
+    }
+
+    private async Task<EventTeam> EnsureTeamAsync(
+        long eventId,
+        string name,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var team = await dbContext.EventTeams
+            .SingleOrDefaultAsync(candidate => candidate.EventId == eventId && candidate.Name == name, cancellationToken);
+
+        if (team is not null)
+        {
+            return team;
+        }
+
+        team = new EventTeam
+        {
+            EventId = eventId,
+            Name = name,
+            CreatedAt = now
+        };
+        dbContext.EventTeams.Add(team);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return team;
+    }
+
+    private async Task EnsureParticipantAsync(
+        long eventId,
+        long playerId,
+        long? teamId,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var participant = await dbContext.EventParticipants
+            .SingleOrDefaultAsync(candidate => candidate.EventId == eventId && candidate.PlayerId == playerId, cancellationToken);
+
+        if (participant is null)
+        {
+            dbContext.EventParticipants.Add(new EventParticipant
+            {
+                EventId = eventId,
+                PlayerId = playerId,
+                TeamId = teamId,
+                JoinedAt = now,
+                Status = EventParticipantStatuses.Active
+            });
+            await dbContext.SaveChangesAsync(cancellationToken);
+            return;
+        }
+
+        participant.TeamId = teamId;
+        participant.Status = EventParticipantStatuses.Active;
+    }
+
+    private async Task<BingoBoard> EnsureBoardAsync(
+        long eventId,
+        string name,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var board = await dbContext.BingoBoards
+            .SingleOrDefaultAsync(candidate => candidate.EventId == eventId && candidate.Name == name, cancellationToken);
+
+        if (board is not null)
+        {
+            return board;
+        }
+
+        board = new BingoBoard
+        {
+            EventId = eventId,
+            Name = name,
+            Rows = 2,
+            Columns = 2,
+            CreatedAt = now
+        };
+        dbContext.BingoBoards.Add(board);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return board;
     }
 
     private async Task<BingoTile> EnsureTileAsync(
@@ -187,6 +299,8 @@ public sealed class AdminDevSeedService(
 
         if (tile is not null)
         {
+            tile.Description = description;
+            tile.SortOrder = sortOrder;
             return tile;
         }
 
@@ -196,7 +310,7 @@ public sealed class AdminDevSeedService(
             Title = title,
             Description = description,
             SortOrder = sortOrder,
-            ConfigJson = "{}"
+            ConfigJson = JsonDefaults.Object
         };
         dbContext.BingoTiles.Add(tile);
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -207,6 +321,7 @@ public sealed class AdminDevSeedService(
         long tileId,
         int tierNumber,
         string title,
+        int scoreValue,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
@@ -215,6 +330,9 @@ public sealed class AdminDevSeedService(
 
         if (tier is not null)
         {
+            tier.Title = title;
+            tier.ScoreValue = scoreValue;
+            tier.IsRequiredForBoardCompletion = true;
             return tier;
         }
 
@@ -223,16 +341,16 @@ public sealed class AdminDevSeedService(
             TileId = tileId,
             TierNumber = tierNumber,
             Title = title,
-            ScoreValue = 1,
+            ScoreValue = scoreValue,
             IsRequiredForBoardCompletion = true,
-            ConfigJson = "{}"
+            ConfigJson = JsonDefaults.Object
         };
         dbContext.BingoTileTiers.Add(tier);
         await dbContext.SaveChangesAsync(cancellationToken);
         return tier;
     }
 
-    private async Task EnsureRuleAsync(
+    private async Task<TileRule> EnsureRuleAsync(
         long tileId,
         long tileTierId,
         string ruleType,
@@ -252,7 +370,7 @@ public sealed class AdminDevSeedService(
 
         if (rule is null)
         {
-            dbContext.TileRules.Add(new TileRule
+            rule = new TileRule
             {
                 TileId = tileId,
                 TileTierId = tileTierId,
@@ -261,12 +379,137 @@ public sealed class AdminDevSeedService(
                 IsActive = true,
                 ConfigJson = configJson,
                 CreatedAt = now
-            });
-            return;
+            };
+            dbContext.TileRules.Add(rule);
+            await dbContext.SaveChangesAsync(cancellationToken);
+            return rule;
         }
 
         rule.Scope = scope;
         rule.IsActive = true;
         rule.ConfigJson = configJson;
+        return rule;
+    }
+
+    private async Task<ExternalCompetition> EnsureTemplePlaceholderAsync(
+        long eventId,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var competition = await dbContext.ExternalCompetitions
+            .SingleOrDefaultAsync(
+                candidate => candidate.EventId == eventId &&
+                    candidate.Provider == ExternalCompetitionProviders.TempleOsrs &&
+                    candidate.ExternalId == "demo-temple-readonly",
+                cancellationToken);
+
+        if (competition is not null)
+        {
+            competition.Name = "Demo TempleOSRS Read Cache";
+            competition.MetricType = "xp";
+            competition.MetricKey = "overall";
+            competition.Status = ExternalCompetitionStatuses.Active;
+            return competition;
+        }
+
+        competition = new ExternalCompetition
+        {
+            EventId = eventId,
+            Provider = ExternalCompetitionProviders.TempleOsrs,
+            ExternalId = "demo-temple-readonly",
+            Name = "Demo TempleOSRS Read Cache",
+            MetricType = "xp",
+            MetricKey = "overall",
+            CompetitionMode = ExternalCompetitionModes.Individual,
+            Status = ExternalCompetitionStatuses.Active,
+            LastSyncStatus = "demo_cached",
+            LastSuccessfulSyncAt = now.AddMinutes(-10),
+            LastSyncedAt = now.AddMinutes(-10),
+            CreatedAt = now,
+            ConfigJson = JsonSerializer.Serialize(new { source = "dev_seed", readOnly = true }, JsonOptions)
+        };
+        dbContext.ExternalCompetitions.Add(competition);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return competition;
+    }
+
+    private async Task ResetDemoProgressAsync(long eventId, CancellationToken cancellationToken)
+    {
+        var contributions = await dbContext.EventProgressContributions
+            .Where(contribution => contribution.EventId == eventId)
+            .ToListAsync(cancellationToken);
+        var tileProgress = await dbContext.EventTileProgress
+            .Where(progress => progress.EventId == eventId)
+            .ToListAsync(cancellationToken);
+        var tierProgress = await dbContext.EventTileTierProgress
+            .Where(progress => progress.EventId == eventId)
+            .ToListAsync(cancellationToken);
+
+        dbContext.EventProgressContributions.RemoveRange(contributions);
+        dbContext.EventTileProgress.RemoveRange(tileProgress);
+        dbContext.EventTileTierProgress.RemoveRange(tierProgress);
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task SeedProgressAsync(
+        long eventId,
+        long tileId,
+        long tileTierId,
+        long ruleId,
+        long teamId,
+        long playerId,
+        decimal currentValue,
+        decimal requiredValue,
+        bool isCompleted,
+        DateTimeOffset createdAt,
+        CancellationToken cancellationToken)
+    {
+        dbContext.EventTileProgress.Add(new EventTileProgress
+        {
+            EventId = eventId,
+            TileId = tileId,
+            TeamId = teamId,
+            PlayerId = null,
+            CurrentValue = currentValue,
+            CurrentTier = isCompleted ? 1 : 0,
+            IsCompleted = isCompleted,
+            CompletedAt = isCompleted ? createdAt : null,
+            UpdatedAt = createdAt,
+            MetadataJson = JsonSerializer.Serialize(new { source = "dev_seed" }, JsonOptions)
+        });
+
+        dbContext.EventTileTierProgress.Add(new EventTileTierProgress
+        {
+            EventId = eventId,
+            TileId = tileId,
+            TileTierId = tileTierId,
+            TeamId = teamId,
+            PlayerId = null,
+            CurrentValue = currentValue,
+            IsAchieved = isCompleted,
+            AchievedAt = isCompleted ? createdAt : null,
+            IsScored = isCompleted,
+            ScoredAt = isCompleted ? createdAt : null,
+            ScoreAwarded = isCompleted ? 1 : 0,
+            UpdatedAt = createdAt,
+            MetadataJson = JsonSerializer.Serialize(new { source = "dev_seed", requiredValue }, JsonOptions)
+        });
+
+        dbContext.EventProgressContributions.Add(new EventProgressContribution
+        {
+            EventId = eventId,
+            TileId = tileId,
+            TileTierId = tileTierId,
+            RuleId = ruleId,
+            TeamId = teamId,
+            PlayerId = playerId,
+            ActivityEventId = null,
+            ValueAdded = currentValue,
+            Description = isCompleted ? "Seeded completed demo progress." : "Seeded partial demo progress.",
+            CreatedAt = createdAt,
+            MetadataJson = JsonSerializer.Serialize(new { source = "dev_seed" }, JsonOptions)
+        });
+
+        await dbContext.SaveChangesAsync(cancellationToken);
     }
 }

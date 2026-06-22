@@ -1,4 +1,5 @@
 using SwedesEventPlanner.Contracts.Admin;
+using SwedesEventPlanner.Contracts.Events;
 
 namespace SwedesEventPlanner.Application.ExternalCompetitions;
 
@@ -16,6 +17,10 @@ public interface IExternalCompetitionSyncService
     Task<AdminExternalCompetitionSyncRunResponse?> SyncCompetitionAsync(
         string eventSlug,
         long externalCompetitionId,
+        CancellationToken cancellationToken);
+
+    Task<EventTempleRefreshResponse?> RequestPublicRefreshAsync(
+        string eventSlug,
         CancellationToken cancellationToken);
 
     Task<AdminExternalCompetitionSyncRunListResponse> ListSyncRunsAsync(
