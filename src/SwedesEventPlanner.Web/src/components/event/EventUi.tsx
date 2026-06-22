@@ -74,8 +74,9 @@ export function TopNav({ activeSlug }: { activeSlug?: string }) {
   return (
     <nav className="flex flex-wrap items-center gap-2">
       <NavItem to="/events">Events</NavItem>
+      <NavItem to="/admin">Admin Setup</NavItem>
       {activeSlug ? <NavItem to={`/events/${activeSlug}`}>Board</NavItem> : null}
-      {activeSlug ? <NavItem to={`/admin/events/${activeSlug}/setup`}>Admin Setup</NavItem> : null}
+      {activeSlug ? <NavItem to={`/admin/events/${activeSlug}/setup`}>Event Setup</NavItem> : null}
     </nav>
   )
 }
@@ -141,7 +142,7 @@ export function EventHero({
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {teams.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Teams will appear when the event is seeded.</p>
+          <p className="text-sm text-muted-foreground">Teams will appear after you create them in admin setup.</p>
         ) : (
           teams.slice(0, 5).map((team, index) => (
             <div key={team.id} className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
@@ -303,7 +304,7 @@ export function ContributionFeed({
   }
 
   if (contributions.length === 0) {
-    return <StateCard title="No drops yet" detail="Post mock activity to populate the feed." />
+    return <StateCard title="No contributions yet" detail="Submit activity manually or sync TempleOSRS data." />
   }
 
   return (

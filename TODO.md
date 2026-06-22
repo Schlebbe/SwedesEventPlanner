@@ -64,7 +64,7 @@
 - Add Serilog structured console/file logging without secrets.
 - Add FluentValidation in application services.
 - Enable Swagger/OpenAPI in development only.
-- Add C# development seed classes.
+- Keep manual local setup covered by admin/testing endpoints and `.http` examples.
 - Add CSV event signup import from Google Forms exports.
 - Store signup-specific fields on event signup/participant records, not on global players:
   - availability
@@ -125,7 +125,7 @@
 ## Future Event Setup Work
 
 - Add team draft workflow.
-- Add realistic Swedes board seed.
+- Add a fuller manual event builder after MVP setup needs are clearer.
 - Add TempleOSRS clan competition discovery by clan ID.
 - Optionally create event drafts or full events from discovered TempleOSRS competitions.
 

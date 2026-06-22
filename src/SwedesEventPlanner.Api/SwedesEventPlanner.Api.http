@@ -1,56 +1,51 @@
 @baseUrl = http://localhost:5000
 @adminToken = dev-admin-token-change-me
 
-### Liveness
+### 1. Liveness
 GET {{baseUrl}}/health
 
-### Readiness
+### 1. Readiness
 GET {{baseUrl}}/health/ready
 
-### Service information
+### 1. Service information
 GET {{baseUrl}}/api
 
-### Public events
-GET {{baseUrl}}/api/events
-
-### Public event by slug
-GET {{baseUrl}}/api/events/local-mock-activity-demo
-
-### Public event board
-GET {{baseUrl}}/api/events/local-mock-activity-demo/board
-
-### Public event teams
-GET {{baseUrl}}/api/events/local-mock-activity-demo/teams
-
-### Public event contributions
-GET {{baseUrl}}/api/events/local-mock-activity-demo/contributions
-
-### Public read-only TempleOSRS refresh request
-POST {{baseUrl}}/api/events/local-mock-activity-demo/templeosrs/refresh
-
-### Admin/testing status
+### 2. Admin status
 GET {{baseUrl}}/api/admin/status
 Authorization: Bearer {{adminToken}}
 
-### Import CSV event signups
-POST {{baseUrl}}/api/admin/events/local-mock-activity-demo/signups/import-csv
+### 2. List admin events
+GET {{baseUrl}}/api/admin/events
+Authorization: Bearer {{adminToken}}
+
+### 2. Create event
+# Copy id -> {{eventId}} and slug -> {{eventSlug}} from the response.
+POST {{baseUrl}}/api/admin/events
 Authorization: Bearer {{adminToken}}
 Content-Type: application/json
 
 {
-  "csvText": "Timestamp,Email Address,RuneScape Name,Availability,Daily Hours,Preferred Content,Notes,Team Preference\n2026-07-02T17:30:00Z,player@example.invalid,Sebbe,Evenings,3,Raids,Ready,Blue"
+  "slug": "manual-bingo-2026",
+  "name": "Manual Bingo 2026",
+  "eventType": "bingo",
+  "status": "active",
+  "startsAt": "2026-07-02T17:00:00Z",
+  "endsAt": "2026-07-16T17:00:00Z",
+  "timeZone": "Europe/Stockholm"
 }
 
-### List event signups
-GET {{baseUrl}}/api/admin/events/local-mock-activity-demo/signups
+### 2. Set event status
+POST {{baseUrl}}/api/admin/events/{{eventSlug}}/status
 Authorization: Bearer {{adminToken}}
+Content-Type: application/json
 
-### List event participants
-GET {{baseUrl}}/api/admin/events/local-mock-activity-demo/participants
-Authorization: Bearer {{adminToken}}
+{
+  "status": "active"
+}
 
-### Create event team
-POST {{baseUrl}}/api/admin/events/local-mock-activity-demo/teams
+### 3. Create team
+# Copy id -> {{teamId}} from the response.
+POST {{baseUrl}}/api/admin/events/{{eventSlug}}/teams
 Authorization: Bearer {{adminToken}}
 Content-Type: application/json
 
@@ -58,36 +53,151 @@ Content-Type: application/json
   "name": "Blue"
 }
 
-### Assign participant team
-POST {{baseUrl}}/api/admin/events/local-mock-activity-demo/participants/1/assign-team
+### 4. Import CSV signup
+POST {{baseUrl}}/api/admin/events/{{eventSlug}}/signups/import-csv
 Authorization: Bearer {{adminToken}}
 Content-Type: application/json
 
 {
-  "teamId": 1
+  "csvText": "Timestamp,Email Address,RuneScape Name,Availability,Daily Hours,Preferred Content,Notes,Team Preference\n2026-07-02T17:30:00Z,player@example.invalid,Sebbe,Evenings,3,Raids,Ready,Blue"
 }
 
-### Seed local mock activity demo data
-POST {{baseUrl}}/api/admin/dev/seed-mock-activity-demo
+### 4. List signups
+GET {{baseUrl}}/api/admin/events/{{eventSlug}}/signups
 Authorization: Bearer {{adminToken}}
 
-### Link TempleOSRS competition for an event
-POST {{baseUrl}}/api/admin/events/local-mock-activity-demo/external-competitions/templeosrs
+### 4. List participants
+# Copy participant id -> {{participantId}} from the response.
+GET {{baseUrl}}/api/admin/events/{{eventSlug}}/participants
+Authorization: Bearer {{adminToken}}
+
+### 5. Assign participant to team
+POST {{baseUrl}}/api/admin/events/{{eventSlug}}/participants/{{participantId}}/assign-team
 Authorization: Bearer {{adminToken}}
 Content-Type: application/json
 
 {
-  "externalId": "12345",
-  "name": "Local Temple Read Cache",
+  "teamId": {{teamId}}
+}
+
+### 6. Create board
+# Copy id -> {{boardId}} from the response.
+POST {{baseUrl}}/api/admin/events/{{eventSlug}}/boards
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "name": "Manual Board",
+  "rows": 5,
+  "columns": 5
+}
+
+### 7. Create tile
+# Copy id -> {{tileId}} from the response.
+POST {{baseUrl}}/api/admin/events/{{eventSlug}}/boards/{{boardId}}/tiles
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "title": "Scythe Drop",
+  "description": "Count Scythe drops from manual activity payloads.",
+  "positionX": 0,
+  "positionY": 0,
+  "sortOrder": 1
+}
+
+### 7. Create tile tier
+# Copy id -> {{tileTierId}} from the response.
+POST {{baseUrl}}/api/admin/events/{{eventSlug}}/tiles/{{tileId}}/tiers
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "tierNumber": 1,
+  "title": "One drop",
+  "description": "One matching item drop.",
+  "scoreValue": 1,
+  "isRequiredForBoardCompletion": true,
+  "sortOrder": 1
+}
+
+### 8. Create item_count rule
+POST {{baseUrl}}/api/admin/events/{{eventSlug}}/tiles/{{tileId}}/rules
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "tileTierId": {{tileTierId}},
+  "ruleType": "item_count",
+  "scope": "team",
+  "isActive": true,
+  "configJson": "{\"activityType\":\"item_drop\",\"itemIds\":[22486],\"requiredValue\":1,\"duplicatesCount\":true}"
+}
+
+### 8. Create point_threshold rule
+POST {{baseUrl}}/api/admin/events/{{eventSlug}}/tiles/{{tileId}}/rules
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "tileTierId": {{tileTierId}},
+  "ruleType": "point_threshold",
+  "scope": "team",
+  "isActive": true,
+  "configJson": "{\"activityType\":\"item_drop\",\"pointsTable\":[{\"itemId\":22486,\"points\":10}],\"requiredValue\":10}"
+}
+
+### 8. Create external_competition_metric rule
+POST {{baseUrl}}/api/admin/events/{{eventSlug}}/tiles/{{tileId}}/rules
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "tileTierId": {{tileTierId}},
+  "ruleType": "external_competition_metric",
+  "scope": "team",
+  "isActive": true,
+  "configJson": "{\"provider\":\"templeosrs\",\"externalCompetitionId\":{{externalCompetitionId}},\"metricType\":\"xp\",\"metricKey\":\"overall\",\"requiredValue\":1000000}"
+}
+
+### 8. List board/tile/tier/rule setup
+GET {{baseUrl}}/api/admin/events/{{eventSlug}}/board-setup
+Authorization: Bearer {{adminToken}}
+
+### 9. Link externally-created TempleOSRS competition
+# Set {{templeCompetitionId}} before running. Copy id -> {{externalCompetitionId}} from the response.
+POST {{baseUrl}}/api/admin/events/{{eventSlug}}/external-competitions/templeosrs
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "externalId": "{{templeCompetitionId}}",
+  "name": "Manual Temple Read Cache",
   "metricType": "xp",
   "metricKey": "overall"
 }
 
-### List linked external competitions
-GET {{baseUrl}}/api/admin/events/local-mock-activity-demo/external-competitions
+### 9. List linked external competitions
+GET {{baseUrl}}/api/admin/events/{{eventSlug}}/external-competitions
 Authorization: Bearer {{adminToken}}
 
-### Mock activity endpoint
+### 10. Trigger read-only Temple sync
+POST {{baseUrl}}/api/admin/events/{{eventSlug}}/external-competitions/{{externalCompetitionId}}/sync
+Authorization: Bearer {{adminToken}}
+
+### 10. Cached Temple player metrics
+GET {{baseUrl}}/api/admin/external-competitions/{{externalCompetitionId}}/player-metrics
+Authorization: Bearer {{adminToken}}
+
+### 10. Cached Temple team metrics
+GET {{baseUrl}}/api/admin/external-competitions/{{externalCompetitionId}}/team-metrics
+Authorization: Bearer {{adminToken}}
+
+### 10. Unmatched Temple identities
+GET {{baseUrl}}/api/admin/external-competitions/{{externalCompetitionId}}/unmatched-identities
+Authorization: Bearer {{adminToken}}
+
+### 11. Submit manual activity payload through Development-only endpoint
 POST {{baseUrl}}/api/activity
 Content-Type: application/json
 
@@ -99,5 +209,23 @@ Content-Type: application/json
   "itemName": "Scythe of vitur",
   "quantity": 1,
   "occurredAt": "2026-07-02T18:30:00Z",
-  "dedupeKey": "local-demo-scythe-1"
+  "dedupeKey": "manual-scythe-1"
 }
+
+### 12. Public events
+GET {{baseUrl}}/api/events
+
+### 12. Public event by slug
+GET {{baseUrl}}/api/events/{{eventSlug}}
+
+### 12. Public event board
+GET {{baseUrl}}/api/events/{{eventSlug}}/board
+
+### 12. Public event teams
+GET {{baseUrl}}/api/events/{{eventSlug}}/teams
+
+### 12. Public event contributions
+GET {{baseUrl}}/api/events/{{eventSlug}}/contributions
+
+### 12. Public read-only TempleOSRS refresh request
+POST {{baseUrl}}/api/events/{{eventSlug}}/templeosrs/refresh

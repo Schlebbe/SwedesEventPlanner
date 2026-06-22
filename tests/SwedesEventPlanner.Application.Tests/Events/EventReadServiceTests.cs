@@ -180,8 +180,8 @@ public sealed class EventReadServiceTests
 
         var eventDefinition = new EventDefinition
         {
-            Slug = "local-mock-activity-demo",
-            Name = "Local Mock Activity Demo",
+            Slug = "manual-bingo-2026",
+            Name = "Manual Bingo 2026",
             EventType = "bingo",
             Status = EventStatuses.Active,
             StartsAt = TestNow.AddDays(-1),

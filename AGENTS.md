@@ -87,7 +87,7 @@ nginx
 ASP.NET Core serving the built React frontend in production
 ```
 
-Use Windows local development for the primary coding/debugging loop. Run the API, Worker, Vite frontend, tests, local PostgreSQL or Testcontainers, Swagger/OpenAPI, development config, development seed data, and safe fake/dev secrets locally on Windows.
+Use Windows local development for the primary coding/debugging loop. Run the API, Worker, Vite frontend, tests, local PostgreSQL or Testcontainers, Swagger/OpenAPI, development config, manually created local test data, and safe fake/dev secrets locally on Windows.
 
 Use the Raspberry Pi as the production hosting target for MVP. Run production `swedeseventplanner-api`, production `swedeseventplanner-worker`, production PostgreSQL, nginx, production secrets, and explicit production migrations there.
 

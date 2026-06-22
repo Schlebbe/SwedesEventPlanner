@@ -23,12 +23,93 @@ public static class AdminEndpoints
                     "CSV event signup import",
                     "team assignment",
                     "unmatched TempleOSRS identity review",
-                    "sync/export diagnostics",
+                    "read-only sync diagnostics",
                 ]));
         })
         .WithName("GetAdminStatus")
         .WithSummary("Get admin/testing surface status.")
         .Produces<AdminStatusResponse>(StatusCodes.Status200OK);
+
+        group.MapGet("/events", async Task<Ok<AdminEventListResponse>> (
+            IAdminEventSetupService setupService,
+            CancellationToken cancellationToken) =>
+        {
+            var response = await setupService.ListEventsAsync(cancellationToken);
+            return TypedResults.Ok(response);
+        })
+        .WithName("ListAdminEvents")
+        .WithSummary("List events for admin/testing setup.")
+        .Produces<AdminEventListResponse>(StatusCodes.Status200OK);
+
+        group.MapPost("/events", async Task<Results<Created<AdminEventSetupSummaryResponse>, ProblemHttpResult>> (
+            CreateAdminEventRequest request,
+            IAdminEventSetupService setupService,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var response = await setupService.CreateEventAsync(request, cancellationToken);
+                return TypedResults.Created($"/api/admin/events/{response.Slug}", response);
+            }
+            catch (AdminEventSetupException exception)
+            {
+                return TypedResults.Problem(
+                    title: exception.Message,
+                    statusCode: StatusCodes.Status400BadRequest);
+            }
+        })
+        .WithName("CreateAdminEvent")
+        .WithSummary("Create an event for manual local setup.")
+        .Produces<AdminEventSetupSummaryResponse>(StatusCodes.Status201Created)
+        .ProducesProblem(StatusCodes.Status400BadRequest);
+
+        group.MapPut("/events/{eventSlug}", async Task<Results<Ok<AdminEventSetupSummaryResponse>, NotFound, ProblemHttpResult>> (
+            string eventSlug,
+            UpdateAdminEventRequest request,
+            IAdminEventSetupService setupService,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var response = await setupService.UpdateEventAsync(eventSlug, request, cancellationToken);
+                return response is null ? TypedResults.NotFound() : TypedResults.Ok(response);
+            }
+            catch (AdminEventSetupException exception)
+            {
+                return TypedResults.Problem(
+                    title: exception.Message,
+                    statusCode: StatusCodes.Status400BadRequest);
+            }
+        })
+        .WithName("UpdateAdminEvent")
+        .WithSummary("Update basic event fields for manual setup.")
+        .Produces<AdminEventSetupSummaryResponse>(StatusCodes.Status200OK)
+        .Produces(StatusCodes.Status404NotFound)
+        .ProducesProblem(StatusCodes.Status400BadRequest);
+
+        group.MapPost("/events/{eventSlug}/status", async Task<Results<Ok<AdminEventSetupSummaryResponse>, NotFound, ProblemHttpResult>> (
+            string eventSlug,
+            UpdateAdminEventStatusRequest request,
+            IAdminEventSetupService setupService,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var response = await setupService.SetEventStatusAsync(eventSlug, request, cancellationToken);
+                return response is null ? TypedResults.NotFound() : TypedResults.Ok(response);
+            }
+            catch (AdminEventSetupException exception)
+            {
+                return TypedResults.Problem(
+                    title: exception.Message,
+                    statusCode: StatusCodes.Status400BadRequest);
+            }
+        })
+        .WithName("SetAdminEventStatus")
+        .WithSummary("Set event status for manual setup.")
+        .Produces<AdminEventSetupSummaryResponse>(StatusCodes.Status200OK)
+        .Produces(StatusCodes.Status404NotFound)
+        .ProducesProblem(StatusCodes.Status400BadRequest);
 
         group.MapPost("/events/{eventSlug}/signups/import-csv", async Task<Results<Ok<CsvSignupImportResponse>, NotFound, ProblemHttpResult>> (
             string eventSlug,
@@ -136,6 +217,152 @@ public static class AdminEndpoints
         .Produces(StatusCodes.Status404NotFound)
         .ProducesProblem(StatusCodes.Status400BadRequest);
 
+        group.MapGet("/events/{eventSlug}/board-setup", async Task<Results<Ok<AdminBoardSetupResponse>, NotFound>> (
+            string eventSlug,
+            IAdminEventSetupService setupService,
+            CancellationToken cancellationToken) =>
+        {
+            var response = await setupService.GetBoardSetupAsync(eventSlug, cancellationToken);
+            return response is null ? TypedResults.NotFound() : TypedResults.Ok(response);
+        })
+        .WithName("GetAdminBoardSetup")
+        .WithSummary("List board, tile, tier, and rule setup for an event.")
+        .Produces<AdminBoardSetupResponse>(StatusCodes.Status200OK)
+        .Produces(StatusCodes.Status404NotFound);
+
+        group.MapPost("/events/{eventSlug}/boards", async Task<Results<Created<AdminBingoBoardResponse>, NotFound, ProblemHttpResult>> (
+            string eventSlug,
+            CreateBingoBoardRequest request,
+            IAdminEventSetupService setupService,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var response = await setupService.CreateBoardAsync(eventSlug, request, cancellationToken);
+                return response is null
+                    ? TypedResults.NotFound()
+                    : TypedResults.Created($"/api/admin/events/{eventSlug}/boards/{response.Id}", response);
+            }
+            catch (AdminEventSetupException exception)
+            {
+                return TypedResults.Problem(
+                    title: exception.Message,
+                    statusCode: StatusCodes.Status400BadRequest);
+            }
+        })
+        .WithName("CreateAdminBingoBoard")
+        .WithSummary("Create or update the event bingo board.")
+        .Produces<AdminBingoBoardResponse>(StatusCodes.Status201Created)
+        .Produces(StatusCodes.Status404NotFound)
+        .ProducesProblem(StatusCodes.Status400BadRequest);
+
+        group.MapPost("/events/{eventSlug}/boards/{boardId:long}/tiles", async Task<Results<Created<AdminBingoTileResponse>, NotFound, ProblemHttpResult>> (
+            string eventSlug,
+            long boardId,
+            CreateBingoTileRequest request,
+            IAdminEventSetupService setupService,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var response = await setupService.CreateTileAsync(eventSlug, boardId, request, cancellationToken);
+                return response is null
+                    ? TypedResults.NotFound()
+                    : TypedResults.Created($"/api/admin/events/{eventSlug}/tiles/{response.Id}", response);
+            }
+            catch (AdminEventSetupException exception)
+            {
+                return TypedResults.Problem(
+                    title: exception.Message,
+                    statusCode: StatusCodes.Status400BadRequest);
+            }
+        })
+        .WithName("CreateAdminBingoTile")
+        .WithSummary("Create a bingo tile for manual setup.")
+        .Produces<AdminBingoTileResponse>(StatusCodes.Status201Created)
+        .Produces(StatusCodes.Status404NotFound)
+        .ProducesProblem(StatusCodes.Status400BadRequest);
+
+        group.MapPost("/events/{eventSlug}/tiles/{tileId:long}/tiers", async Task<Results<Created<AdminBingoTileTierResponse>, NotFound, ProblemHttpResult>> (
+            string eventSlug,
+            long tileId,
+            CreateBingoTileTierRequest request,
+            IAdminEventSetupService setupService,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var response = await setupService.CreateTileTierAsync(eventSlug, tileId, request, cancellationToken);
+                return response is null
+                    ? TypedResults.NotFound()
+                    : TypedResults.Created($"/api/admin/events/{eventSlug}/tiles/{tileId}/tiers/{response.Id}", response);
+            }
+            catch (AdminEventSetupException exception)
+            {
+                return TypedResults.Problem(
+                    title: exception.Message,
+                    statusCode: StatusCodes.Status400BadRequest);
+            }
+        })
+        .WithName("CreateAdminBingoTileTier")
+        .WithSummary("Create a bingo tile tier for manual setup.")
+        .Produces<AdminBingoTileTierResponse>(StatusCodes.Status201Created)
+        .Produces(StatusCodes.Status404NotFound)
+        .ProducesProblem(StatusCodes.Status400BadRequest);
+
+        group.MapPost("/events/{eventSlug}/tiles/{tileId:long}/rules", async Task<Results<Created<AdminTileRuleResponse>, NotFound, ProblemHttpResult>> (
+            string eventSlug,
+            long tileId,
+            UpsertTileRuleRequest request,
+            IAdminEventSetupService setupService,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var response = await setupService.CreateTileRuleAsync(eventSlug, tileId, request, cancellationToken);
+                return response is null
+                    ? TypedResults.NotFound()
+                    : TypedResults.Created($"/api/admin/events/{eventSlug}/tiles/{tileId}/rules/{response.Id}", response);
+            }
+            catch (AdminEventSetupException exception)
+            {
+                return TypedResults.Problem(
+                    title: exception.Message,
+                    statusCode: StatusCodes.Status400BadRequest);
+            }
+        })
+        .WithName("CreateAdminTileRule")
+        .WithSummary("Create a tile rule for manual setup.")
+        .Produces<AdminTileRuleResponse>(StatusCodes.Status201Created)
+        .Produces(StatusCodes.Status404NotFound)
+        .ProducesProblem(StatusCodes.Status400BadRequest);
+
+        group.MapPut("/events/{eventSlug}/tiles/{tileId:long}/rules/{ruleId:long}", async Task<Results<Ok<AdminTileRuleResponse>, NotFound, ProblemHttpResult>> (
+            string eventSlug,
+            long tileId,
+            long ruleId,
+            UpsertTileRuleRequest request,
+            IAdminEventSetupService setupService,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var response = await setupService.UpdateTileRuleAsync(eventSlug, tileId, ruleId, request, cancellationToken);
+                return response is null ? TypedResults.NotFound() : TypedResults.Ok(response);
+            }
+            catch (AdminEventSetupException exception)
+            {
+                return TypedResults.Problem(
+                    title: exception.Message,
+                    statusCode: StatusCodes.Status400BadRequest);
+            }
+        })
+        .WithName("UpdateAdminTileRule")
+        .WithSummary("Update a tile rule for manual setup.")
+        .Produces<AdminTileRuleResponse>(StatusCodes.Status200OK)
+        .Produces(StatusCodes.Status404NotFound)
+        .ProducesProblem(StatusCodes.Status400BadRequest);
+
         group.MapPost("/events/{eventSlug}/external-competitions/templeosrs", async Task<Results<Created<AdminExternalCompetitionResponse>, NotFound, ProblemHttpResult>> (
             string eventSlug,
             LinkExternalCompetitionRequest request,
@@ -236,25 +463,6 @@ public static class AdminEndpoints
         .WithName("ListAdminExternalCompetitionUnmatchedIdentities")
         .WithSummary("List unmatched TempleOSRS names for an external competition.")
         .Produces<AdminExternalCompetitionUnmatchedIdentityListResponse>(StatusCodes.Status200OK);
-
-        group.MapPost("/dev/seed-mock-activity-demo", async Task<Results<Ok<AdminDevSeedResponse>, NotFound>> (
-            IHostEnvironment environment,
-            IAdminDevSeedService seedService,
-            CancellationToken cancellationToken) =>
-        {
-            if (!environment.IsDevelopment())
-            {
-                return TypedResults.NotFound();
-            }
-
-            var response = await seedService.SeedMockActivityDemoAsync(cancellationToken);
-            return TypedResults.Ok(response);
-        })
-        .WithName("SeedMockActivityDemo")
-        .WithSummary("Seed local development data for mock activity processing.")
-        .WithDescription("Development-only helper that creates a known player, active event, team, participant, board, tiles, and basic rules.")
-        .Produces<AdminDevSeedResponse>(StatusCodes.Status200OK)
-        .Produces(StatusCodes.Status404NotFound);
 
         return group;
     }

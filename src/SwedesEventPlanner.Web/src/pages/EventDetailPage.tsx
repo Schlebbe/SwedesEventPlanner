@@ -130,14 +130,14 @@ export function EventDetailPage() {
               ))}
             </div>
           ) : (
-            <StateCard title="Board unavailable" detail="No board has been seeded yet." />
+            <StateCard title="Board unavailable" detail="No board has been created for this event yet." />
           )}
         </div>
 
         <div className="flex flex-col gap-4">
           <SectionHeading
-            title="Recent Drops"
-            description="Visible mock activity contributions"
+            title="Recent Contributions"
+            description="Manual activity and TempleOSRS sync contributions"
           />
           <ContributionFeed
             isLoading={contributionsQuery.isLoading}

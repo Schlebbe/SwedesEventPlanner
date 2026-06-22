@@ -11,6 +11,10 @@ public sealed record AdminEventSetupSummaryResponse(
     DateTimeOffset? EndsAt,
     string TimeZone);
 
+/// <summary>Admin-facing list of events available for setup.</summary>
+public sealed record AdminEventListResponse(
+    IReadOnlyList<AdminEventSetupSummaryResponse> Events);
+
 /// <summary>Admin-facing imported signup row.</summary>
 public sealed record AdminEventSignupResponse(
     long Id,
@@ -56,6 +60,52 @@ public sealed record AdminEventParticipantListResponse(
     IReadOnlyList<AdminEventTeamResponse> Teams,
     IReadOnlyList<AdminEventParticipantResponse> Participants,
     int UnassignedCount);
+
+/// <summary>Admin-facing bingo board row.</summary>
+public sealed record AdminBingoBoardResponse(
+    long Id,
+    string Name,
+    int? Rows,
+    int? Columns);
+
+/// <summary>Admin-facing bingo tile row.</summary>
+public sealed record AdminBingoTileResponse(
+    long Id,
+    long BoardId,
+    string Title,
+    string? Description,
+    int? PositionX,
+    int? PositionY,
+    int SortOrder,
+    IReadOnlyList<AdminBingoTileTierResponse> Tiers,
+    IReadOnlyList<AdminTileRuleResponse> Rules);
+
+/// <summary>Admin-facing bingo tile tier row.</summary>
+public sealed record AdminBingoTileTierResponse(
+    long Id,
+    long TileId,
+    int TierNumber,
+    string? Title,
+    string? Description,
+    int ScoreValue,
+    bool IsRequiredForBoardCompletion,
+    int SortOrder);
+
+/// <summary>Admin-facing tile rule row.</summary>
+public sealed record AdminTileRuleResponse(
+    long Id,
+    long TileId,
+    long? TileTierId,
+    string RuleType,
+    string Scope,
+    bool IsActive,
+    string ConfigJson);
+
+/// <summary>Admin-facing board setup graph for manual testing.</summary>
+public sealed record AdminBoardSetupResponse(
+    AdminEventSetupSummaryResponse Event,
+    AdminBingoBoardResponse? Board,
+    IReadOnlyList<AdminBingoTileResponse> Tiles);
 
 /// <summary>Admin request for linking a TempleOSRS competition to an event.</summary>
 public sealed record LinkExternalCompetitionRequest

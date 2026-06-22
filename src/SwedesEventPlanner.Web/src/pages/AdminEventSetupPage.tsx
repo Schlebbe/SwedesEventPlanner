@@ -3,7 +3,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   AlertTriangleIcon,
   DatabaseIcon,
+  LayersIcon,
   LinkIcon,
+  PlusIcon,
   RefreshCwIcon,
   SaveIcon,
   UploadIcon,
@@ -12,7 +14,12 @@ import {
 import { useParams } from "react-router-dom"
 import {
   assignParticipantTeam,
+  createBingoBoard,
+  createBingoTile,
+  createBingoTileTier,
   createEventTeam,
+  createTileRule,
+  getAdminBoardSetup,
   importCsvSignups,
   linkTempleCompetition,
   listExternalCompetitionPlayerMetrics,
@@ -28,7 +35,9 @@ import {
   type AdminExternalCompetitionSyncRun,
   type AdminExternalCompetitionTeamMetric,
   type AdminExternalCompetitionUnmatchedIdentity,
+  type AdminBingoTile,
   type AdminEventParticipant,
+  type AdminTileRule,
   type CsvSignupImportResponse,
 } from "@/api/admin"
 import {
@@ -70,6 +79,16 @@ export function AdminEventSetupPage() {
   const [selectedCompetitionId, setSelectedCompetitionId] = useState<number | null>(null)
   const [selectedTeams, setSelectedTeams] = useState<Record<number, string>>({})
   const [lastImport, setLastImport] = useState<CsvSignupImportResponse | null>(null)
+  const [boardName, setBoardName] = useState("Bingo Board")
+  const [tileTitle, setTileTitle] = useState("")
+  const [tileDescription, setTileDescription] = useState("")
+  const [selectedTileId, setSelectedTileId] = useState<number | null>(null)
+  const [tierTitle, setTierTitle] = useState("")
+  const [tierNumber, setTierNumber] = useState("1")
+  const [tierTarget, setTierTarget] = useState("1")
+  const [ruleType, setRuleType] = useState("item_count")
+  const [ruleScope, setRuleScope] = useState("team")
+  const [ruleConfigJson, setRuleConfigJson] = useState(defaultRuleConfig("item_count", "1"))
   const tokenReady = adminToken.trim().length > 0
 
   const signupsQuery = useQuery({
@@ -87,6 +106,12 @@ export function AdminEventSetupPage() {
   const competitionsQuery = useQuery({
     queryKey: ["admin-external-competitions", slug, tokenReady],
     queryFn: ({ signal }) => listExternalCompetitions(slug, adminToken, signal),
+    enabled: slug.length > 0 && tokenReady,
+    retry: false,
+  })
+  const boardSetupQuery = useQuery({
+    queryKey: ["admin-board-setup", slug, tokenReady],
+    queryFn: ({ signal }) => getAdminBoardSetup(slug, adminToken, signal),
     enabled: slug.length > 0 && tokenReady,
     retry: false,
   })
@@ -172,6 +197,72 @@ export function AdminEventSetupPage() {
       await invalidateExternalCompetitionQueries(queryClient, slug, competition.id)
     },
   })
+  const createBoardMutation = useMutation({
+    mutationFn: () => createBingoBoard(slug, { name: boardName, rows: 5, columns: 5 }, adminToken),
+    onSuccess: async () => {
+      await invalidateBoardSetupQueries(queryClient, slug)
+    },
+  })
+  const createTileMutation = useMutation({
+    mutationFn: () =>
+      createBingoTile(
+        slug,
+        boardSetupQuery.data?.board?.id ?? 0,
+        {
+          title: tileTitle,
+          description: tileDescription.trim().length > 0 ? tileDescription : null,
+          positionX: null,
+          positionY: null,
+          sortOrder: boardSetupQuery.data?.tiles.length ?? 0,
+        },
+        adminToken,
+      ),
+    onSuccess: async (tile) => {
+      setTileTitle("")
+      setTileDescription("")
+      setSelectedTileId(tile.id)
+      await invalidateBoardSetupQueries(queryClient, slug)
+    },
+  })
+  const createTierMutation = useMutation({
+    mutationFn: () =>
+      createBingoTileTier(
+        slug,
+        selectedTileId ?? boardSetupQuery.data?.tiles[0]?.id ?? 0,
+        {
+          tierNumber: numberOrDefault(tierNumber, 1),
+          title: tierTitle.trim().length > 0 ? tierTitle : null,
+          description: null,
+          scoreValue: 1,
+          isRequiredForBoardCompletion: true,
+          sortOrder: numberOrDefault(tierNumber, 1),
+        },
+        adminToken,
+      ),
+    onSuccess: async () => {
+      setTierTitle("")
+      setRuleConfigJson(defaultRuleConfig(ruleType, tierTarget))
+      await invalidateBoardSetupQueries(queryClient, slug)
+    },
+  })
+  const createRuleMutation = useMutation({
+    mutationFn: () =>
+      createTileRule(
+        slug,
+        selectedTileId ?? boardSetupQuery.data?.tiles[0]?.id ?? 0,
+        {
+          tileTierId: selectedTileTierId(boardSetupQuery.data?.tiles ?? [], selectedTileId),
+          ruleType,
+          scope: ruleScope,
+          isActive: true,
+          configJson: ruleConfigJson,
+        },
+        adminToken,
+      ),
+    onSuccess: async () => {
+      await invalidateBoardSetupQueries(queryClient, slug)
+    },
+  })
   const syncTempleMutation = useMutation({
     mutationFn: (competition: AdminExternalCompetition) =>
       syncExternalCompetition(slug, competition.id, adminToken),
@@ -224,6 +315,53 @@ export function AdminEventSetupPage() {
             onCompetitionIdChange={setTempleCompetitionId}
             onLink={() => linkTempleMutation.mutate()}
           />
+          <BoardSetupActionsCard
+            boardName={boardName}
+            tileTitle={tileTitle}
+            tileDescription={tileDescription}
+            tierNumber={tierNumber}
+            tierTitle={tierTitle}
+            tierTarget={tierTarget}
+            ruleType={ruleType}
+            ruleScope={ruleScope}
+            ruleConfigJson={ruleConfigJson}
+            selectedTileId={selectedTileId}
+            tiles={boardSetupQuery.data?.tiles ?? []}
+            hasBoard={Boolean(boardSetupQuery.data?.board)}
+            disabled={!tokenReady}
+            errors={[
+              createBoardMutation.error,
+              createTileMutation.error,
+              createTierMutation.error,
+              createRuleMutation.error,
+            ]}
+            onBoardNameChange={setBoardName}
+            onTileTitleChange={setTileTitle}
+            onTileDescriptionChange={setTileDescription}
+            onTierNumberChange={setTierNumber}
+            onTierTitleChange={setTierTitle}
+            onTierTargetChange={(value) => {
+              setTierTarget(value)
+              setRuleConfigJson(defaultRuleConfig(ruleType, value))
+            }}
+            onRuleTypeChange={(value) => {
+              setRuleType(value)
+              setRuleConfigJson(defaultRuleConfig(value, tierTarget))
+            }}
+            onRuleScopeChange={setRuleScope}
+            onRuleConfigJsonChange={setRuleConfigJson}
+            onSelectedTileChange={setSelectedTileId}
+            onCreateBoard={() => createBoardMutation.mutate()}
+            onCreateTile={() => createTileMutation.mutate()}
+            onCreateTier={() => createTierMutation.mutate()}
+            onCreateRule={() => createRuleMutation.mutate()}
+            isSaving={
+              createBoardMutation.isPending ||
+              createTileMutation.isPending ||
+              createTierMutation.isPending ||
+              createRuleMutation.isPending
+            }
+          />
         </div>
 
         <div className="flex flex-col gap-4">
@@ -264,6 +402,18 @@ export function AdminEventSetupPage() {
           {unassignedParticipants.length > 0 ? (
             <UnassignedCard participants={unassignedParticipants} />
           ) : null}
+
+          <SectionHeading title="Board Setup" description="Manual tile, tier, and rule configuration" />
+          {!tokenReady ? null : boardSetupQuery.isLoading ? (
+            <StateCard title="Loading board setup" detail="Reading board, tiles, tiers, and rules." />
+          ) : boardSetupQuery.isError ? (
+            <StateCard title="Board setup unavailable" detail={errorText(boardSetupQuery.error)} />
+          ) : (
+            <BoardSetupSummaryCard
+              boardName={boardSetupQuery.data?.board?.name ?? null}
+              tiles={boardSetupQuery.data?.tiles ?? []}
+            />
+          )}
 
           <SectionHeading
             title="TempleOSRS"
@@ -341,7 +491,7 @@ function CsvImportCard({
     <Card>
       <CardHeader>
         <CardTitle>CSV Import</CardTitle>
-        <CardDescription>Paste signup rows to create event participants for this demo event.</CardDescription>
+        <CardDescription>Paste signup rows to create participants for this event.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <Textarea
@@ -606,6 +756,259 @@ function UnassignedCard({ participants }: { participants: AdminEventParticipant[
   )
 }
 
+function BoardSetupActionsCard({
+  boardName,
+  tileTitle,
+  tileDescription,
+  tierNumber,
+  tierTitle,
+  tierTarget,
+  ruleType,
+  ruleScope,
+  ruleConfigJson,
+  selectedTileId,
+  tiles,
+  hasBoard,
+  disabled,
+  errors,
+  isSaving,
+  onBoardNameChange,
+  onTileTitleChange,
+  onTileDescriptionChange,
+  onTierNumberChange,
+  onTierTitleChange,
+  onTierTargetChange,
+  onRuleTypeChange,
+  onRuleScopeChange,
+  onRuleConfigJsonChange,
+  onSelectedTileChange,
+  onCreateBoard,
+  onCreateTile,
+  onCreateTier,
+  onCreateRule,
+}: {
+  boardName: string
+  tileTitle: string
+  tileDescription: string
+  tierNumber: string
+  tierTitle: string
+  tierTarget: string
+  ruleType: string
+  ruleScope: string
+  ruleConfigJson: string
+  selectedTileId: number | null
+  tiles: AdminBingoTile[]
+  hasBoard: boolean
+  disabled: boolean
+  errors: (Error | null)[]
+  isSaving: boolean
+  onBoardNameChange: (value: string) => void
+  onTileTitleChange: (value: string) => void
+  onTileDescriptionChange: (value: string) => void
+  onTierNumberChange: (value: string) => void
+  onTierTitleChange: (value: string) => void
+  onTierTargetChange: (value: string) => void
+  onRuleTypeChange: (value: string) => void
+  onRuleScopeChange: (value: string) => void
+  onRuleConfigJsonChange: (value: string) => void
+  onSelectedTileChange: (value: number | null) => void
+  onCreateBoard: () => void
+  onCreateTile: () => void
+  onCreateTier: () => void
+  onCreateRule: () => void
+}) {
+  const selectedTile = tiles.find((tile) => tile.id === selectedTileId) ?? tiles[0] ?? null
+  const firstError = errors.find(Boolean)
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Board Builder</CardTitle>
+        <CardDescription>Manual MVP setup. Rule config is validated JSON.</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+          <label className="flex flex-col gap-2 text-sm font-medium">
+            Board name
+            <Input value={boardName} onChange={(event) => onBoardNameChange(event.target.value)} />
+          </label>
+          <Button disabled={disabled || isSaving || boardName.trim().length === 0} onClick={onCreateBoard}>
+            <LayersIcon data-icon="inline-start" aria-hidden="true" />
+            {hasBoard ? "Update Board" : "Create Board"}
+          </Button>
+        </div>
+
+        <Separator />
+
+        <div className="grid gap-3">
+          <label className="flex flex-col gap-2 text-sm font-medium">
+            Tile title
+            <Input
+              value={tileTitle}
+              placeholder="Scythe drops"
+              onChange={(event) => onTileTitleChange(event.target.value)}
+            />
+          </label>
+          <label className="flex flex-col gap-2 text-sm font-medium">
+            Tile description
+            <Input
+              value={tileDescription}
+              placeholder="Optional public description"
+              onChange={(event) => onTileDescriptionChange(event.target.value)}
+            />
+          </label>
+          <Button disabled={disabled || isSaving || !hasBoard || tileTitle.trim().length === 0} onClick={onCreateTile}>
+            <PlusIcon data-icon="inline-start" aria-hidden="true" />
+            Add Tile
+          </Button>
+        </div>
+
+        <Separator />
+
+        <label className="flex flex-col gap-2 text-sm font-medium">
+          Selected tile
+          <select
+            className="h-9 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            value={selectedTile?.id ?? ""}
+            onChange={(event) => onSelectedTileChange(event.target.value ? Number(event.target.value) : null)}
+          >
+            <option value="">Choose tile</option>
+            {tiles.map((tile) => (
+              <option key={tile.id} value={tile.id}>
+                {tile.title}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <div className="grid gap-3 sm:grid-cols-3">
+          <label className="flex flex-col gap-2 text-sm font-medium">
+            Tier number
+            <Input value={tierNumber} inputMode="numeric" onChange={(event) => onTierNumberChange(event.target.value)} />
+          </label>
+          <label className="flex flex-col gap-2 text-sm font-medium">
+            Tier target
+            <Input value={tierTarget} inputMode="numeric" onChange={(event) => onTierTargetChange(event.target.value)} />
+          </label>
+          <label className="flex flex-col gap-2 text-sm font-medium">
+            Tier title
+            <Input
+              value={tierTitle}
+              placeholder="Tier 1"
+              onChange={(event) => onTierTitleChange(event.target.value)}
+            />
+          </label>
+        </div>
+        <Button disabled={disabled || isSaving || !selectedTile} onClick={onCreateTier}>
+          <PlusIcon data-icon="inline-start" aria-hidden="true" />
+          Add Tier
+        </Button>
+
+        <Separator />
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="flex flex-col gap-2 text-sm font-medium">
+            Rule type
+            <select
+              className="h-9 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+              value={ruleType}
+              onChange={(event) => onRuleTypeChange(event.target.value)}
+            >
+              <option value="item_count">item_count</option>
+              <option value="point_threshold">point_threshold</option>
+              <option value="external_competition_metric">external_competition_metric</option>
+              <option value="manual">manual</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-2 text-sm font-medium">
+            Scope
+            <select
+              className="h-9 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+              value={ruleScope}
+              onChange={(event) => onRuleScopeChange(event.target.value)}
+            >
+              <option value="team">team</option>
+              <option value="player">player</option>
+              <option value="event">event</option>
+            </select>
+          </label>
+        </div>
+        <label className="flex flex-col gap-2 text-sm font-medium">
+          Rule config JSON
+          <Textarea
+            value={ruleConfigJson}
+            className="min-h-36 font-mono text-xs"
+            onChange={(event) => onRuleConfigJsonChange(event.target.value)}
+          />
+        </label>
+        <Button disabled={disabled || isSaving || !selectedTile} onClick={onCreateRule}>
+          <SaveIcon data-icon="inline-start" aria-hidden="true" />
+          Create Rule
+        </Button>
+        {firstError ? <p className="text-sm text-destructive">{errorText(firstError)}</p> : null}
+      </CardContent>
+    </Card>
+  )
+}
+
+function BoardSetupSummaryCard({
+  boardName,
+  tiles,
+}: {
+  boardName: string | null
+  tiles: AdminBingoTile[]
+}) {
+  if (!boardName) {
+    return <StateCard title="No board yet" detail="Create a board, then add tiles, tiers, and rules." />
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{boardName}</CardTitle>
+        <CardDescription>{tiles.length} tile(s) configured</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        {tiles.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Tiles will appear here after you add them.</p>
+        ) : (
+          tiles.map((tile, index) => (
+            <div key={tile.id} className="flex flex-col gap-3">
+              {index > 0 ? <Separator /> : null}
+              <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-start">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{tile.title}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {tile.tiers.length} tier(s) · {tile.rules.length} rule(s)
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {tile.tiers.map((tier) => (
+                      <Badge key={tier.id} variant="outline">
+                        {tier.title ?? `Tier ${tier.tierNumber}`}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1 text-xs text-muted-foreground">
+                  {tile.rules.length === 0 ? (
+                    <span>No rules</span>
+                  ) : (
+                    tile.rules.map((rule: AdminTileRule) => (
+                      <span key={rule.id}>
+                        {rule.ruleType} · {rule.scope}
+                      </span>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
 function TempleDiagnosticsCard({
   competitions,
   selectedCompetitionId,
@@ -812,6 +1215,13 @@ async function invalidateSetupQueries(
   ])
 }
 
+async function invalidateBoardSetupQueries(
+  queryClient: ReturnType<typeof useQueryClient>,
+  slug: string,
+) {
+  await queryClient.invalidateQueries({ queryKey: ["admin-board-setup", slug] })
+}
+
 async function invalidateExternalCompetitionQueries(
   queryClient: ReturnType<typeof useQueryClient>,
   slug: string,
@@ -828,6 +1238,50 @@ async function invalidateExternalCompetitionQueries(
 
 function formatNullableTime(value: string | null) {
   return value ? formatTimestamp(value) : "Never"
+}
+
+function selectedTileTierId(tiles: AdminBingoTile[], selectedTileId: number | null) {
+  const tile = tiles.find((candidate) => candidate.id === selectedTileId) ?? tiles[0]
+  return tile?.tiers[0]?.id ?? null
+}
+
+function numberOrDefault(value: string, fallback: number) {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
+function defaultRuleConfig(ruleType: string, target: string, externalCompetitionId?: number) {
+  const requiredValue = numberOrDefault(target, 1)
+  const configs: Record<string, unknown> = {
+    item_count: {
+      activityType: "item_drop",
+      itemIds: [22486],
+      requiredValue,
+      duplicatesCount: true,
+    },
+    point_threshold: {
+      activityType: "item_drop",
+      pointsTable: [
+        {
+          itemId: 22486,
+          points: requiredValue,
+        },
+      ],
+      requiredValue,
+    },
+    external_competition_metric: {
+      provider: "templeosrs",
+      metricType: "xp",
+      metricKey: "overall",
+      requiredValue,
+      ...(externalCompetitionId ? { externalCompetitionId } : {}),
+    },
+    manual: {
+      requiredValue,
+    },
+  }
+
+  return JSON.stringify(configs[ruleType] ?? configs.item_count, null, 2)
 }
 
 function errorText(error: unknown) {

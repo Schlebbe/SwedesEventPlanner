@@ -6,8 +6,8 @@ import App from "./App"
 
 const eventSummary = {
   id: 1,
-  slug: "local-mock-activity-demo",
-  name: "Local Mock Activity Demo",
+  slug: "manual-bingo-2026",
+  name: "Manual Bingo 2026",
   eventType: "bingo",
   status: "active",
   startsAt: "2026-01-01T00:00:00Z",
@@ -30,13 +30,13 @@ describe("App", () => {
     expect(
       await screen.findByRole("heading", { name: "Swedes Event Planner" }),
     ).toBeInTheDocument()
-    expect(await screen.findByText("Local Mock Activity Demo")).toBeInTheDocument()
+    expect(await screen.findByText("Manual Bingo 2026")).toBeInTheDocument()
   })
 
   it("renders the event page with board progress and contributions", async () => {
     stubFetch({
-      "/api/events/local-mock-activity-demo": eventSummary,
-      "/api/events/local-mock-activity-demo/board": {
+      "/api/events/manual-bingo-2026": eventSummary,
+      "/api/events/manual-bingo-2026/board": {
         event: eventSummary,
         teams: [
           {
@@ -98,7 +98,7 @@ describe("App", () => {
           ],
         },
       },
-      "/api/events/local-mock-activity-demo/teams": {
+      "/api/events/manual-bingo-2026/teams": {
         event: eventSummary,
         teams: [
           {
@@ -112,7 +112,7 @@ describe("App", () => {
           },
         ],
       },
-      "/api/events/local-mock-activity-demo/contributions": {
+      "/api/events/manual-bingo-2026/contributions": {
         event: eventSummary,
         contributions: [
           {
@@ -130,10 +130,10 @@ describe("App", () => {
       },
     })
 
-    renderApp("/events/local-mock-activity-demo")
+    renderApp("/events/manual-bingo-2026")
 
     expect(
-      await screen.findByRole("heading", { name: "Local Mock Activity Demo" }),
+      await screen.findByRole("heading", { name: "Manual Bingo 2026" }),
     ).toBeInTheDocument()
     expect(await screen.findByText("TOB Tier 1")).toBeInTheDocument()
     expect(await screen.findByText(/Sebbe added/)).toBeInTheDocument()

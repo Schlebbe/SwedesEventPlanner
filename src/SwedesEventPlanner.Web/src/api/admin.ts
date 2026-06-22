@@ -26,6 +26,20 @@ export type AdminEventSetupSummary = {
   timeZone: string
 }
 
+export type AdminEventListResponse = {
+  events: AdminEventSetupSummary[]
+}
+
+export type CreateAdminEventRequest = {
+  slug: string
+  name: string
+  eventType: string
+  status: string
+  startsAt: string
+  endsAt: string | null
+  timeZone: string
+}
+
 export type AdminEventSignupListResponse = {
   event: AdminEventSetupSummary
   signups: AdminEventSignup[]
@@ -161,6 +175,84 @@ export type AdminExternalCompetitionUnmatchedIdentityListResponse = {
   identities: AdminExternalCompetitionUnmatchedIdentity[]
 }
 
+export type AdminBoardSetupResponse = {
+  event: AdminEventSetupSummary
+  board: AdminBingoBoard | null
+  tiles: AdminBingoTile[]
+}
+
+export type AdminBingoBoard = {
+  id: number
+  name: string
+  rows: number | null
+  columns: number | null
+}
+
+export type AdminBingoTile = {
+  id: number
+  boardId: number
+  title: string
+  description: string | null
+  positionX: number | null
+  positionY: number | null
+  sortOrder: number
+  tiers: AdminBingoTileTier[]
+  rules: AdminTileRule[]
+}
+
+export type AdminBingoTileTier = {
+  id: number
+  tileId: number
+  tierNumber: number
+  title: string | null
+  description: string | null
+  scoreValue: number
+  isRequiredForBoardCompletion: boolean
+  sortOrder: number
+}
+
+export type AdminTileRule = {
+  id: number
+  tileId: number
+  tileTierId: number | null
+  ruleType: string
+  scope: string
+  isActive: boolean
+  configJson: string
+}
+
+export async function listAdminEvents(
+  adminToken: string,
+  signal?: AbortSignal,
+): Promise<AdminEventListResponse> {
+  return fetchAdminJson<AdminEventListResponse>("/api/admin/events", adminToken, { signal })
+}
+
+export async function createAdminEvent(
+  request: CreateAdminEventRequest,
+  adminToken: string,
+): Promise<AdminEventSetupSummary> {
+  return fetchAdminJson<AdminEventSetupSummary>("/api/admin/events", adminToken, {
+    method: "POST",
+    body: JSON.stringify(request),
+  })
+}
+
+export async function setAdminEventStatus(
+  eventSlug: string,
+  status: string,
+  adminToken: string,
+): Promise<AdminEventSetupSummary> {
+  return fetchAdminJson<AdminEventSetupSummary>(
+    `/api/admin/events/${eventSlug}/status`,
+    adminToken,
+    {
+      method: "POST",
+      body: JSON.stringify({ status }),
+    },
+  )
+}
+
 export async function importCsvSignups(
   eventSlug: string,
   csvText: string,
@@ -227,6 +319,96 @@ export async function assignParticipantTeam(
     {
       method: "POST",
       body: JSON.stringify({ teamId }),
+    },
+  )
+}
+
+export async function getAdminBoardSetup(
+  eventSlug: string,
+  adminToken: string,
+  signal?: AbortSignal,
+): Promise<AdminBoardSetupResponse> {
+  return fetchAdminJson<AdminBoardSetupResponse>(
+    `/api/admin/events/${eventSlug}/board-setup`,
+    adminToken,
+    { signal },
+  )
+}
+
+export async function createBingoBoard(
+  eventSlug: string,
+  request: { name: string; rows: number | null; columns: number | null },
+  adminToken: string,
+): Promise<AdminBingoBoard> {
+  return fetchAdminJson<AdminBingoBoard>(`/api/admin/events/${eventSlug}/boards`, adminToken, {
+    method: "POST",
+    body: JSON.stringify(request),
+  })
+}
+
+export async function createBingoTile(
+  eventSlug: string,
+  boardId: number,
+  request: {
+    title: string
+    description: string | null
+    positionX: number | null
+    positionY: number | null
+    sortOrder: number
+  },
+  adminToken: string,
+): Promise<AdminBingoTile> {
+  return fetchAdminJson<AdminBingoTile>(
+    `/api/admin/events/${eventSlug}/boards/${boardId}/tiles`,
+    adminToken,
+    {
+      method: "POST",
+      body: JSON.stringify(request),
+    },
+  )
+}
+
+export async function createBingoTileTier(
+  eventSlug: string,
+  tileId: number,
+  request: {
+    tierNumber: number
+    title: string | null
+    description: string | null
+    scoreValue: number
+    isRequiredForBoardCompletion: boolean
+    sortOrder: number
+  },
+  adminToken: string,
+): Promise<AdminBingoTileTier> {
+  return fetchAdminJson<AdminBingoTileTier>(
+    `/api/admin/events/${eventSlug}/tiles/${tileId}/tiers`,
+    adminToken,
+    {
+      method: "POST",
+      body: JSON.stringify(request),
+    },
+  )
+}
+
+export async function createTileRule(
+  eventSlug: string,
+  tileId: number,
+  request: {
+    tileTierId: number | null
+    ruleType: string
+    scope: string
+    isActive: boolean
+    configJson: string
+  },
+  adminToken: string,
+): Promise<AdminTileRule> {
+  return fetchAdminJson<AdminTileRule>(
+    `/api/admin/events/${eventSlug}/tiles/${tileId}/rules`,
+    adminToken,
+    {
+      method: "POST",
+      body: JSON.stringify(request),
     },
   )
 }

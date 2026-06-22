@@ -23,10 +23,10 @@ Recommended options:
 Postman
 curl
 small simulator script
-backend seed script
+manual `.http` requests
 ```
 
-A simulator script is preferred once the basic endpoint exists because it can generate many players and many events quickly.
+Manual `.http` requests are preferred for MVP smoke testing so the local database starts empty and the tester creates the exact event, roster, board, and rules under test.
 
 ## Mock/dev activity endpoint
 
@@ -36,7 +36,7 @@ Recommended mock/dev endpoint:
 POST /api/activity
 ```
 
-`/api/activity` is for simulator, Postman, curl, seed, and development testing only. It is not the future production RuneLite plugin endpoint.
+`/api/activity` is for simulator, Postman, curl, and development testing only. It is not the future production RuneLite plugin endpoint.
 
 ## Example curl requests
 
@@ -111,13 +111,13 @@ Failed TempleOSRS sync runs are logged and visible in admin/testing views.
 
 ## Suggested simulator data
 
-Seed:
+Manual setup target:
 
 ```text
-100 players
-2 active bingo events
-1 raid drop hunt event
-4-8 teams per bingo event
+1 manually created bingo event
+2-4 teams
+imported CSV signups
+manual board, tile, tier, and rule setup
 ```
 
 Example players:
@@ -262,7 +262,7 @@ A Postman collection can include:
 Create activity: item drop
 Create activity: duplicate event
 Create activity: event outside time window
-Seed/update cached Temple competition metric
+Link and sync cached Temple competition metric
 Request public Temple sync while available
 Request public Temple sync while on cooldown
 Request admin force-sync

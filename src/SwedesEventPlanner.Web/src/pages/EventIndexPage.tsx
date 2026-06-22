@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query"
+import { Link } from "react-router-dom"
 import { listEvents } from "@/api/events"
 import {
   AppFrame,
@@ -9,6 +10,7 @@ import {
   TopNav,
 } from "@/components/event/EventUi"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import {
   Card,
   CardContent,
@@ -49,7 +51,7 @@ export function EventIndexPage() {
           ) : events.length === 0 ? (
             <StateCard
               title="No visible events"
-              detail="Seed the mock activity demo from the admin helper."
+              detail="Create an event from the admin setup page, then set it to scheduled or active."
             />
           ) : (
             <div className="grid gap-3 md:grid-cols-2">
@@ -62,14 +64,17 @@ export function EventIndexPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Local Demo</CardTitle>
-            <CardDescription>Seed and post mock drops to watch the board move.</CardDescription>
+            <CardTitle>Manual Setup</CardTitle>
+            <CardDescription>Create local test data yourself from an empty database.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
-            <Badge variant="secondary">/api/admin/dev/seed-mock-activity-demo</Badge>
+            <Badge variant="secondary">/api/admin/events</Badge>
             <p className="text-sm text-muted-foreground">
-              The helper returns the seeded slug so this page can open directly at the live board.
+              Use the admin setup page to create events, teams, boards, tiles, rules, and Temple links.
             </p>
+            <Button asChild>
+              <Link to="/admin">Open Admin Setup</Link>
+            </Button>
           </CardContent>
         </Card>
       </section>

@@ -156,6 +156,78 @@ public sealed class AdminEventSetupServiceTests
         Assert.Equal(1, Assert.Single(afterAssignment.Teams).ParticipantCount);
     }
 
+    [Fact]
+    public async Task Manual_setup_creates_event_board_tile_tier_and_rule()
+    {
+        await using var dbContext = CreateDbContext();
+        var service = new AdminEventSetupService(dbContext);
+
+        var eventDefinition = await service.CreateEventAsync(
+            new CreateAdminEventRequest
+            {
+                Slug = "manual-bingo-2026",
+                Name = "Manual Bingo 2026",
+                EventType = EventTypes.Bingo,
+                Status = EventStatuses.Active,
+                StartsAt = TestNow,
+                EndsAt = TestNow.AddDays(7),
+                TimeZone = "Europe/Stockholm"
+            },
+            CancellationToken.None);
+        var board = await service.CreateBoardAsync(
+            eventDefinition.Slug,
+            new CreateBingoBoardRequest { Name = "Manual Board", Rows = 5, Columns = 5 },
+            CancellationToken.None);
+        Assert.NotNull(board);
+        var tile = await service.CreateTileAsync(
+            eventDefinition.Slug,
+            board.Id,
+            new CreateBingoTileRequest
+            {
+                Title = "Scythe Drop",
+                Description = "Manual activity smoke test.",
+                SortOrder = 1
+            },
+            CancellationToken.None);
+        Assert.NotNull(tile);
+        var tier = await service.CreateTileTierAsync(
+            eventDefinition.Slug,
+            tile.Id,
+            new CreateBingoTileTierRequest
+            {
+                TierNumber = 1,
+                Title = "One drop",
+                ScoreValue = 1,
+                SortOrder = 1
+            },
+            CancellationToken.None);
+        Assert.NotNull(tier);
+
+        var rule = await service.CreateTileRuleAsync(
+            eventDefinition.Slug,
+            tile.Id,
+            new UpsertTileRuleRequest
+            {
+                TileTierId = tier.Id,
+                RuleType = "item_count",
+                Scope = "team",
+                ConfigJson = "{\"activityType\":\"item_drop\",\"itemIds\":[22486],\"requiredValue\":1}"
+            },
+            CancellationToken.None);
+
+        Assert.NotNull(rule);
+        Assert.Equal("item_count", rule.RuleType);
+        Assert.Equal(tier.Id, rule.TileTierId);
+
+        var setup = await service.GetBoardSetupAsync(eventDefinition.Slug, CancellationToken.None);
+        Assert.NotNull(setup);
+        Assert.Equal("Manual Board", setup.Board?.Name);
+        var setupTile = Assert.Single(setup.Tiles);
+        Assert.Equal("Scythe Drop", setupTile.Title);
+        Assert.Single(setupTile.Tiers);
+        Assert.Single(setupTile.Rules);
+    }
+
     private const string EventSlug = "summer-bingo-2026";
     private static readonly DateTimeOffset TestNow = new(2026, 7, 2, 18, 30, 0, TimeSpan.Zero);
 

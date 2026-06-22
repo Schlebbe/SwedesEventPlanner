@@ -156,7 +156,7 @@ frontend production API calls: relative /api paths
 
 Swagger/OpenAPI should not be publicly exposed in production by default.
 
-The Raspberry Pi is the production hosting target for MVP. Keep day-to-day development on Windows local development with local PostgreSQL or Testcontainers, Vite, Swagger, development config, and development seed data.
+The Raspberry Pi is the production hosting target for MVP. Keep day-to-day development on Windows local development with local PostgreSQL or Testcontainers, Vite, Swagger, development config, and manually created local test data.
 
 Do not create a separate Pi staging/dev environment for MVP unless the project explicitly revisits that decision later.
 

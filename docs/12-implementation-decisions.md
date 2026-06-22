@@ -209,7 +209,7 @@ Windows local development:
   run Worker locally
   run Vite frontend locally
   use local PostgreSQL or Testcontainers for integration tests
-  use development config and development seed data
+  use development config and manually created local test data
   enable Swagger/OpenAPI
   use safe fake/dev secrets only
   iterate quickly without touching production Pi state
@@ -255,9 +255,7 @@ board completion state
 whether a team completed the board
 ```
 
-The first UI does not need full event, board, team, and rule management.
-
-Development seed data is acceptable for:
+The first UI should include enough admin/testing setup to create local smoke-test data manually:
 
 ```text
 events
@@ -269,7 +267,7 @@ item groups
 test players
 ```
 
-Use C# seed classes first. JSON seed files can be added later if board authoring becomes easier that way.
+Do not rely on app-level fake/demo seed helpers for MVP manual testing.
 
 Include safe placeholders in `.env.example`, including:
 
@@ -320,7 +318,7 @@ Temple metric contribution logs should show grouped team-level changes in the ma
 
 Negative Temple adjustments should be visible in tile details and admin/testing views, but should not be spammed into the main participant contribution feed.
 
-Admin/testing tools should support manually assigning players to teams for MVP. Seed/mock tooling can also assign players quickly for development.
+Admin/testing tools should support manually assigning players to teams for MVP.
 
 CSV event signup import is part of MVP.
 

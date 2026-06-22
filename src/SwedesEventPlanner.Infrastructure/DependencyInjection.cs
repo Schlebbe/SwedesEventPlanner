@@ -36,7 +36,6 @@ public static class DependencyInjection
 
         services.AddScoped<IActivityIngestionService, ActivityIngestionService>();
         services.AddScoped<IActivityProcessingService, ActivityProcessingService>();
-        services.AddScoped<IAdminDevSeedService, AdminDevSeedService>();
         services.AddScoped<IAdminEventSetupService, AdminEventSetupService>();
         services.AddScoped<IExternalCompetitionSyncService, ExternalCompetitionSyncService>();
         services.AddScoped<IEventReadService, EventReadService>();

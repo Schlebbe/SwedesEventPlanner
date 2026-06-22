@@ -69,3 +69,14 @@ dotnet ef database update --project src\SwedesEventPlanner.Infrastructure\Swedes
 ```
 
 The API may auto-apply migrations only in development when enabled by configuration. Production Pi migrations should be explicit deploy/operator steps added later.
+
+## Reset for manual testing
+
+To remove old local demo or manual test rows, reset only the local development database:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/dev/reset-local-database.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/dev/update-local-database.ps1
+```
+
+After reset, create events, teams, signups, boards, tiles, rules, and Temple links manually through `/admin` or `src/SwedesEventPlanner.Api/SwedesEventPlanner.Api.http`. App-level demo seed helpers are intentionally not part of the manual workflow.

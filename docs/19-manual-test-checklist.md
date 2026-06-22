@@ -1,67 +1,87 @@
 # 19 - Manual Test Checklist
 
-Use this checklist for Windows local development stabilization passes. Do not deploy to the Raspberry Pi from this checklist.
+Use this checklist for Windows local development only. Do not deploy to the Raspberry Pi from this checklist.
 
 ## Health Checks
 
 - Start the API in Development.
-- Open `/health` and verify it returns healthy liveness.
+- Open `/health` and verify liveness returns healthy.
 - Open `/health/ready` and verify PostgreSQL readiness is healthy.
+- Open `/api` and verify the service information endpoint responds.
 
-## Local DB/Migrations
+## Empty Local Database
 
+- For a clean smoke test, run `scripts/windows/dev/reset-local-database.ps1` against the local development database only.
 - Run `scripts/windows/dev/update-local-database.ps1`.
-- Verify EF migrations apply without secrets in command output.
-- For a clean smoke test, run `scripts/windows/dev/reset-local-database.ps1` only against the local development database.
+- Verify migrations apply without secrets in command output.
+- Do not use demo seed endpoints; app-level fake/demo seed data has been removed.
 
-## Demo Seed
+## Manual Event Setup
 
-- Start the API in Development.
-- Use the admin token from local configuration.
-- POST `/api/admin/dev/seed-mock-activity-demo`.
-- Verify the response includes `local-mock-activity-demo`.
-- Open `/events/local-mock-activity-demo` and verify multiple teams, partial progress, completed progress, and TempleOSRS cached freshness appear.
+- Open `/admin`.
+- Enter the local admin token from user-secrets or development config.
+- Create a new event with status `draft`, `scheduled`, or `active`.
+- Copy the returned slug/ID when using `src/SwedesEventPlanner.Api/SwedesEventPlanner.Api.http`.
+- Verify `/events` is empty until an event is `scheduled` or `active`.
+
+## Team Setup
+
+- Open `/admin/events/{eventSlug}/setup`.
+- Create at least two teams.
+- Verify the participant list shows team counts and unassigned participants clearly.
 
 ## CSV Import
 
-- Open `/admin/events/local-mock-activity-demo/setup`.
-- Enter the local admin token.
 - Paste a small signup CSV with RuneScape name, availability, daily hours, preferred content, notes, and team preference.
 - Import the CSV.
-- Verify signups, players, and participants are created or updated without copying signup-only fields onto global players.
+- Verify signups, players, and participants are created or updated.
+- Verify signup-only fields are shown on signups and are not copied onto global players.
 
 ## Team Assignment
 
-- In the event setup page, create a team.
-- Assign an imported participant to that team.
-- Clear a participant's team assignment.
-- Verify unassigned participant count updates.
+- Assign imported participants to teams.
+- Clear one participant's team assignment and verify they become unassigned.
+- Reassign the participant and verify they can contribute to team-scoped scoring.
 
-## Mock Activity Ingestion
+## Board, Tile, Tier, And Rule Setup
 
-- POST one of the sample activity JSON payloads returned by the demo seed to `/api/activity`.
-- Repeat with the same `dedupeKey`.
+- Create a board for the event.
+- Create at least three tiles.
+- Add one or more tiers to each tile.
+- Create an `item_count` rule with `itemIds`, `requiredValue`, and `duplicatesCount`.
+- Create a `point_threshold` rule with a `pointsTable` and `requiredValue`.
+- Create an `external_competition_metric` rule with `provider`, `externalCompetitionId`, `metricType`, `metricKey`, and `requiredValue`.
+- If manual rules are supported by the current processing path, create a `manual` rule; otherwise leave it as setup data only for now.
+- Verify `/api/admin/events/{eventSlug}/board-setup` shows board, tiles, tiers, and rules.
+
+## Temple Read-Only Sync
+
+- Create a dummy TempleOSRS competition outside this app.
+- Link the Temple competition ID from the setup page or `.http` file.
+- Trigger a read-only sync from the admin TempleOSRS panel.
+- Verify sync runs, cached player metrics, cached team metrics, unmatched names, and team mismatch warnings appear.
+- Verify no Temple create/add/remove/export endpoints are called or required.
+
+## Manual Activity Simulation
+
+- Use `POST /api/activity` in Development to submit manual activity payloads.
+- Repeat a request with the same `dedupeKey`.
 - Verify the second response is marked duplicate.
+- `POST /api/activity` is a Development-only simulation endpoint for future plugin payloads. Real plugin endpoints are still future work.
 
 ## Worker Processing
 
 - Start the worker with `scripts/windows/dev/run-local-worker.ps1`.
 - Verify pending activity queue rows are processed.
-- Refresh the public event board and confirm progress updates.
+- Refresh the public event board and confirm item/point progress updates.
 
 ## Public Event UI
 
 - Open `/events`.
-- Open the seeded demo event.
-- Verify the scoreboard, teams, tile progress, recent positive contribution feed, and TempleOSRS freshness panel render.
+- Open the manually created event.
+- Verify the scoreboard, teams, tile progress, tier progress, contribution feed, and TempleOSRS freshness panel render.
+- Verify team-level Temple sync contributions with no player display safely.
 - Verify negative Temple sync adjustments do not appear in the main public contribution feed.
-
-## Temple Read-Only Sync
-
-- Link a TempleOSRS competition ID from the setup page.
-- Trigger a read-only sync from the admin TempleOSRS panel.
-- Verify sync runs, cached player metrics, cached team metrics, unmatched names, and team mismatch warnings appear.
-- Verify no Temple create/add/remove/export endpoints are called or required.
 
 ## Public Refresh Cooldown
 
@@ -69,4 +89,4 @@ Use this checklist for Windows local development stabilization passes. Do not de
 - Verify the response status is shown without requiring an admin token.
 - Click again immediately.
 - Verify the UI reports the cooldown/next refresh availability and does not start a duplicate sync.
-- Wait until the 5-minute cooldown expires, then verify a new refresh can be requested.
+- Wait until the configured cooldown expires, then verify a new refresh can be requested.

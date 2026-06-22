@@ -67,7 +67,7 @@ Teams should belong to a specific event.
 
 A player can be on different teams in different events.
 
-For MVP, team assignment can be handled through a small admin/testing UI or seed/mock tooling. A proper team draft is deferred.
+For MVP, team assignment can be handled through a small admin/testing UI. A proper team draft is deferred.
 
 For team-scoped events, known/matched players who are not assigned to a team should not contribute progress until assigned. Admin/testing views should surface unassigned matched players.
 
