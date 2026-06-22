@@ -38,3 +38,4 @@ skills-lock.json
 *.env.*
 !.env.example
 !*.env.example
+docs/temple*

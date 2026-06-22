@@ -72,6 +72,95 @@ export type AdminEventParticipant = {
   isUnassigned: boolean
 }
 
+export type AdminExternalCompetition = {
+  id: number
+  provider: string
+  externalId: string
+  name: string
+  metricType: string
+  metricKey: string
+  competitionMode: string
+  status: string
+  lastSyncedAt: string | null
+  lastSuccessfulSyncAt: string | null
+  lastSyncStatus: string | null
+  lastSyncError: string | null
+}
+
+export type AdminExternalCompetitionListResponse = {
+  event: AdminEventSetupSummary
+  competitions: AdminExternalCompetition[]
+}
+
+export type AdminExternalCompetitionSyncRun = {
+  id: number
+  externalCompetitionId: number
+  status: string
+  triggerType: string
+  requestedAt: string | null
+  startedAt: string
+  completedAt: string | null
+  rowsRead: number | null
+  rowsChanged: number | null
+  errorMessage: string | null
+}
+
+export type AdminExternalCompetitionSyncRunListResponse = {
+  runs: AdminExternalCompetitionSyncRun[]
+}
+
+export type AdminExternalCompetitionPlayerMetric = {
+  id: number
+  runeScapeName: string
+  playerId: number | null
+  localPlayerName: string | null
+  metricType: string
+  metricKey: string
+  startValue: number | null
+  currentValue: number | null
+  gainedValue: number
+  rank: number | null
+  lastSyncedAt: string
+}
+
+export type AdminExternalCompetitionPlayerMetricListResponse = {
+  metrics: AdminExternalCompetitionPlayerMetric[]
+}
+
+export type AdminExternalCompetitionTeamMetric = {
+  id: number
+  templeTeamKey: string
+  teamName: string
+  localTeamId: number | null
+  localTeamName: string | null
+  metricType: string
+  metricKey: string
+  startValue: number | null
+  currentValue: number | null
+  gainedValue: number
+  rank: number | null
+  mvpRuneScapeName: string | null
+  members: string[]
+  lastSyncedAt: string
+  hasLocalTeamMismatch: boolean
+}
+
+export type AdminExternalCompetitionTeamMetricListResponse = {
+  metrics: AdminExternalCompetitionTeamMetric[]
+}
+
+export type AdminExternalCompetitionUnmatchedIdentity = {
+  id: number
+  runeScapeName: string
+  displayName: string
+  firstSeenAt: string
+  lastSeenAt: string
+}
+
+export type AdminExternalCompetitionUnmatchedIdentityListResponse = {
+  identities: AdminExternalCompetitionUnmatchedIdentity[]
+}
+
 export async function importCsvSignups(
   eventSlug: string,
   csvText: string,
@@ -139,6 +228,97 @@ export async function assignParticipantTeam(
       method: "POST",
       body: JSON.stringify({ teamId }),
     },
+  )
+}
+
+export async function linkTempleCompetition(
+  eventSlug: string,
+  externalId: string,
+  adminToken: string,
+): Promise<AdminExternalCompetition> {
+  return fetchAdminJson<AdminExternalCompetition>(
+    `/api/admin/events/${eventSlug}/external-competitions/templeosrs`,
+    adminToken,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        externalId,
+        metricType: "xp",
+        metricKey: "overall",
+      }),
+    },
+  )
+}
+
+export async function listExternalCompetitions(
+  eventSlug: string,
+  adminToken: string,
+  signal?: AbortSignal,
+): Promise<AdminExternalCompetitionListResponse> {
+  return fetchAdminJson<AdminExternalCompetitionListResponse>(
+    `/api/admin/events/${eventSlug}/external-competitions`,
+    adminToken,
+    { signal },
+  )
+}
+
+export async function syncExternalCompetition(
+  eventSlug: string,
+  externalCompetitionId: number,
+  adminToken: string,
+): Promise<AdminExternalCompetitionSyncRun> {
+  return fetchAdminJson<AdminExternalCompetitionSyncRun>(
+    `/api/admin/events/${eventSlug}/external-competitions/${externalCompetitionId}/sync`,
+    adminToken,
+    { method: "POST" },
+  )
+}
+
+export async function listExternalCompetitionSyncRuns(
+  externalCompetitionId: number,
+  adminToken: string,
+  signal?: AbortSignal,
+): Promise<AdminExternalCompetitionSyncRunListResponse> {
+  return fetchAdminJson<AdminExternalCompetitionSyncRunListResponse>(
+    `/api/admin/external-competitions/${externalCompetitionId}/sync-runs`,
+    adminToken,
+    { signal },
+  )
+}
+
+export async function listExternalCompetitionPlayerMetrics(
+  externalCompetitionId: number,
+  adminToken: string,
+  signal?: AbortSignal,
+): Promise<AdminExternalCompetitionPlayerMetricListResponse> {
+  return fetchAdminJson<AdminExternalCompetitionPlayerMetricListResponse>(
+    `/api/admin/external-competitions/${externalCompetitionId}/player-metrics`,
+    adminToken,
+    { signal },
+  )
+}
+
+export async function listExternalCompetitionTeamMetrics(
+  externalCompetitionId: number,
+  adminToken: string,
+  signal?: AbortSignal,
+): Promise<AdminExternalCompetitionTeamMetricListResponse> {
+  return fetchAdminJson<AdminExternalCompetitionTeamMetricListResponse>(
+    `/api/admin/external-competitions/${externalCompetitionId}/team-metrics`,
+    adminToken,
+    { signal },
+  )
+}
+
+export async function listExternalCompetitionUnmatchedIdentities(
+  externalCompetitionId: number,
+  adminToken: string,
+  signal?: AbortSignal,
+): Promise<AdminExternalCompetitionUnmatchedIdentityListResponse> {
+  return fetchAdminJson<AdminExternalCompetitionUnmatchedIdentityListResponse>(
+    `/api/admin/external-competitions/${externalCompetitionId}/unmatched-identities`,
+    adminToken,
+    { signal },
   )
 }
 

@@ -4,7 +4,8 @@ namespace SwedesEventPlanner.Contracts.Events;
 public sealed record EventBoardResponse(
     EventSummaryResponse Event,
     BoardResponse Board,
-    IReadOnlyList<EventBoardTeamResponse> Teams);
+    IReadOnlyList<EventBoardTeamResponse> Teams,
+    IReadOnlyList<EventExternalCompetitionFreshnessResponse> ExternalCompetitionFreshness);
 
 /// <summary>Represents a bingo board.</summary>
 public sealed record BoardResponse(
@@ -64,3 +65,13 @@ public sealed record EventBoardTeamResponse(
     int ScoredTiers,
     int CompletedTiles,
     decimal CurrentValue);
+
+/// <summary>Represents freshness for cached external competition progress.</summary>
+public sealed record EventExternalCompetitionFreshnessResponse(
+    long Id,
+    string Provider,
+    string Name,
+    string MetricType,
+    string MetricKey,
+    DateTimeOffset? LastSuccessfulSyncAt,
+    string? LastSyncStatus);

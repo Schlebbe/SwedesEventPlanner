@@ -16,9 +16,9 @@ public sealed class EventProgressContribution
 
     public long? TeamId { get; set; }
 
-    public long PlayerId { get; set; }
+    public long? PlayerId { get; set; }
 
-    public long ActivityEventId { get; set; }
+    public long? ActivityEventId { get; set; }
 
     public decimal ValueAdded { get; set; }
 

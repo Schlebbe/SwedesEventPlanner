@@ -4,6 +4,7 @@ using SwedesEventPlanner.Application.Events;
 using SwedesEventPlanner.Contracts.Events;
 using SwedesEventPlanner.Domain.Bingo;
 using SwedesEventPlanner.Domain.Events;
+using SwedesEventPlanner.Domain.ExternalCompetitions;
 using SwedesEventPlanner.Infrastructure.Persistence;
 
 namespace SwedesEventPlanner.Infrastructure.Events;
@@ -109,6 +110,21 @@ public sealed class EventReadService(EventPlannerDbContext dbContext) : IEventRe
             .Where(progress => progress.EventId == eventSummary.Id && tileIds.Contains(progress.TileId))
             .ToListAsync(cancellationToken);
 
+        var externalCompetitionFreshness = await dbContext.ExternalCompetitions
+            .AsNoTracking()
+            .Where(competition => competition.EventId == eventSummary.Id &&
+                competition.Status == ExternalCompetitionStatuses.Active)
+            .OrderBy(competition => competition.Name)
+            .Select(competition => new EventExternalCompetitionFreshnessResponse(
+                competition.Id,
+                competition.Provider,
+                competition.Name,
+                competition.MetricType,
+                competition.MetricKey,
+                competition.LastSuccessfulSyncAt,
+                competition.LastSyncStatus))
+            .ToListAsync(cancellationToken);
+
         var boardTiles = tiles
             .Select(tile =>
             {
@@ -195,7 +211,8 @@ public sealed class EventReadService(EventPlannerDbContext dbContext) : IEventRe
                     team.ScoredTiers,
                     team.CompletedTiles,
                     team.CurrentValue))
-                .ToList());
+                .ToList(),
+            externalCompetitionFreshness);
     }
 
     public async Task<EventTeamListResponse?> GetTeamsAsync(

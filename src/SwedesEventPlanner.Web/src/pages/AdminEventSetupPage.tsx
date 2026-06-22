@@ -1,13 +1,33 @@
 import { useMemo, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { SaveIcon, UploadIcon, UsersIcon } from "lucide-react"
+import {
+  AlertTriangleIcon,
+  DatabaseIcon,
+  LinkIcon,
+  RefreshCwIcon,
+  SaveIcon,
+  UploadIcon,
+  UsersIcon,
+} from "lucide-react"
 import { useParams } from "react-router-dom"
 import {
   assignParticipantTeam,
   createEventTeam,
   importCsvSignups,
+  linkTempleCompetition,
+  listExternalCompetitionPlayerMetrics,
+  listExternalCompetitions,
+  listExternalCompetitionSyncRuns,
+  listExternalCompetitionTeamMetrics,
+  listExternalCompetitionUnmatchedIdentities,
   listAdminParticipants,
   listAdminSignups,
+  syncExternalCompetition,
+  type AdminExternalCompetition,
+  type AdminExternalCompetitionPlayerMetric,
+  type AdminExternalCompetitionSyncRun,
+  type AdminExternalCompetitionTeamMetric,
+  type AdminExternalCompetitionUnmatchedIdentity,
   type AdminEventParticipant,
   type CsvSignupImportResponse,
 } from "@/api/admin"
@@ -30,6 +50,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
+import { formatNumber, formatTimestamp } from "@/components/event/event-format"
 
 const tokenStorageKey = "swedes-event-planner-admin-token"
 const sampleCsv = [
@@ -44,6 +65,8 @@ export function AdminEventSetupPage() {
   const [adminToken, setAdminToken] = useState(() => localStorage.getItem(tokenStorageKey) ?? "")
   const [csvText, setCsvText] = useState(sampleCsv)
   const [teamName, setTeamName] = useState("")
+  const [templeCompetitionId, setTempleCompetitionId] = useState("")
+  const [selectedCompetitionId, setSelectedCompetitionId] = useState<number | null>(null)
   const [selectedTeams, setSelectedTeams] = useState<Record<number, string>>({})
   const [lastImport, setLastImport] = useState<CsvSignupImportResponse | null>(null)
   const tokenReady = adminToken.trim().length > 0
@@ -58,6 +81,45 @@ export function AdminEventSetupPage() {
     queryKey: ["admin-event-participants", slug, tokenReady],
     queryFn: ({ signal }) => listAdminParticipants(slug, adminToken, signal),
     enabled: slug.length > 0 && tokenReady,
+    retry: false,
+  })
+  const competitionsQuery = useQuery({
+    queryKey: ["admin-external-competitions", slug, tokenReady],
+    queryFn: ({ signal }) => listExternalCompetitions(slug, adminToken, signal),
+    enabled: slug.length > 0 && tokenReady,
+    retry: false,
+  })
+  const selectedCompetition =
+    competitionsQuery.data?.competitions.find((competition) => competition.id === selectedCompetitionId) ??
+    competitionsQuery.data?.competitions[0] ??
+    null
+  const effectiveCompetitionId = selectedCompetition?.id ?? null
+  const syncRunsQuery = useQuery({
+    queryKey: ["admin-external-competition-sync-runs", effectiveCompetitionId, tokenReady],
+    queryFn: ({ signal }) =>
+      listExternalCompetitionSyncRuns(effectiveCompetitionId ?? 0, adminToken, signal),
+    enabled: tokenReady && effectiveCompetitionId !== null,
+    retry: false,
+  })
+  const playerMetricsQuery = useQuery({
+    queryKey: ["admin-external-competition-player-metrics", effectiveCompetitionId, tokenReady],
+    queryFn: ({ signal }) =>
+      listExternalCompetitionPlayerMetrics(effectiveCompetitionId ?? 0, adminToken, signal),
+    enabled: tokenReady && effectiveCompetitionId !== null,
+    retry: false,
+  })
+  const teamMetricsQuery = useQuery({
+    queryKey: ["admin-external-competition-team-metrics", effectiveCompetitionId, tokenReady],
+    queryFn: ({ signal }) =>
+      listExternalCompetitionTeamMetrics(effectiveCompetitionId ?? 0, adminToken, signal),
+    enabled: tokenReady && effectiveCompetitionId !== null,
+    retry: false,
+  })
+  const unmatchedQuery = useQuery({
+    queryKey: ["admin-external-competition-unmatched", effectiveCompetitionId, tokenReady],
+    queryFn: ({ signal }) =>
+      listExternalCompetitionUnmatchedIdentities(effectiveCompetitionId ?? 0, adminToken, signal),
+    enabled: tokenReady && effectiveCompetitionId !== null,
     retry: false,
   })
 
@@ -101,6 +163,21 @@ export function AdminEventSetupPage() {
       await invalidateSetupQueries(queryClient, slug)
     },
   })
+  const linkTempleMutation = useMutation({
+    mutationFn: () => linkTempleCompetition(slug, templeCompetitionId, adminToken),
+    onSuccess: async (competition) => {
+      setTempleCompetitionId("")
+      setSelectedCompetitionId(competition.id)
+      await invalidateExternalCompetitionQueries(queryClient, slug, competition.id)
+    },
+  })
+  const syncTempleMutation = useMutation({
+    mutationFn: (competition: AdminExternalCompetition) =>
+      syncExternalCompetition(slug, competition.id, adminToken),
+    onSuccess: async (_run, competition) => {
+      await invalidateExternalCompetitionQueries(queryClient, slug, competition.id)
+    },
+  })
 
   function saveToken(value: string) {
     setAdminToken(value)
@@ -138,6 +215,13 @@ export function AdminEventSetupPage() {
             error={createTeamMutation.error}
             onTeamNameChange={setTeamName}
             onCreate={() => createTeamMutation.mutate()}
+          />
+          <TempleLinkCard
+            competitionId={templeCompetitionId}
+            disabled={!tokenReady || linkTempleMutation.isPending}
+            error={linkTempleMutation.error}
+            onCompetitionIdChange={setTempleCompetitionId}
+            onLink={() => linkTempleMutation.mutate()}
           />
         </div>
 
@@ -179,6 +263,29 @@ export function AdminEventSetupPage() {
           {unassignedParticipants.length > 0 ? (
             <UnassignedCard participants={unassignedParticipants} />
           ) : null}
+
+          <SectionHeading
+            title="TempleOSRS"
+            description="Read-only linked competition cache and diagnostics"
+          />
+          {!tokenReady ? null : competitionsQuery.isLoading ? (
+            <StateCard title="Loading Temple links" detail="Reading linked competitions." />
+          ) : competitionsQuery.isError ? (
+            <StateCard title="Temple links unavailable" detail={errorText(competitionsQuery.error)} />
+          ) : (
+            <TempleDiagnosticsCard
+              competitions={competitionsQuery.data?.competitions ?? []}
+              selectedCompetitionId={effectiveCompetitionId}
+              syncRuns={syncRunsQuery.data?.runs ?? []}
+              playerMetrics={playerMetricsQuery.data?.metrics ?? []}
+              teamMetrics={teamMetricsQuery.data?.metrics ?? []}
+              unmatchedIdentities={unmatchedQuery.data?.identities ?? []}
+              isSyncing={syncTempleMutation.isPending}
+              syncError={syncTempleMutation.error}
+              onSelectCompetition={setSelectedCompetitionId}
+              onSync={(competition) => syncTempleMutation.mutate(competition)}
+            />
+          )}
         </div>
       </section>
     </AppFrame>
@@ -305,6 +412,45 @@ function TeamCreateCard({
         <Button disabled={disabled || teamName.trim().length === 0} onClick={onCreate}>
           <SaveIcon data-icon="inline-start" aria-hidden="true" />
           Create Team
+        </Button>
+        {error ? <p className="text-sm text-destructive">{errorText(error)}</p> : null}
+      </CardContent>
+    </Card>
+  )
+}
+
+function TempleLinkCard({
+  competitionId,
+  disabled,
+  error,
+  onCompetitionIdChange,
+  onLink,
+}: {
+  competitionId: string
+  disabled: boolean
+  error: Error | null
+  onCompetitionIdChange: (value: string) => void
+  onLink: () => void
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Temple Link</CardTitle>
+        <CardDescription>Attach an existing TempleOSRS competition by ID.</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <label className="flex flex-col gap-2 text-sm font-medium">
+          Competition ID
+          <Input
+            value={competitionId}
+            inputMode="numeric"
+            placeholder="12345"
+            onChange={(event) => onCompetitionIdChange(event.target.value)}
+          />
+        </label>
+        <Button disabled={disabled || competitionId.trim().length === 0} onClick={onLink}>
+          <LinkIcon data-icon="inline-start" aria-hidden="true" />
+          Link Temple
         </Button>
         {error ? <p className="text-sm text-destructive">{errorText(error)}</p> : null}
       </CardContent>
@@ -450,6 +596,202 @@ function UnassignedCard({ participants }: { participants: AdminEventParticipant[
   )
 }
 
+function TempleDiagnosticsCard({
+  competitions,
+  selectedCompetitionId,
+  syncRuns,
+  playerMetrics,
+  teamMetrics,
+  unmatchedIdentities,
+  isSyncing,
+  syncError,
+  onSelectCompetition,
+  onSync,
+}: {
+  competitions: AdminExternalCompetition[]
+  selectedCompetitionId: number | null
+  syncRuns: AdminExternalCompetitionSyncRun[]
+  playerMetrics: AdminExternalCompetitionPlayerMetric[]
+  teamMetrics: AdminExternalCompetitionTeamMetric[]
+  unmatchedIdentities: AdminExternalCompetitionUnmatchedIdentity[]
+  isSyncing: boolean
+  syncError: Error | null
+  onSelectCompetition: (competitionId: number) => void
+  onSync: (competition: AdminExternalCompetition) => void
+}) {
+  const selectedCompetition =
+    competitions.find((competition) => competition.id === selectedCompetitionId) ?? competitions[0]
+  const mismatches = teamMetrics.filter((metric) => metric.hasLocalTeamMismatch)
+
+  if (competitions.length === 0) {
+    return <StateCard title="No Temple links" detail="Link a competition ID to enable read-only sync." />
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div className="min-w-0">
+            <CardTitle>Temple Cache</CardTitle>
+            <CardDescription>
+              {selectedCompetition.name} · {selectedCompetition.competitionMode}
+            </CardDescription>
+          </div>
+          <Button
+            size="sm"
+            disabled={isSyncing}
+            onClick={() => onSync(selectedCompetition)}
+          >
+            <RefreshCwIcon data-icon="inline-start" aria-hidden="true" />
+            Sync
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-center">
+          <select
+            className="h-9 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            value={selectedCompetition.id}
+            onChange={(event) => onSelectCompetition(Number(event.target.value))}
+          >
+            {competitions.map((competition) => (
+              <option key={competition.id} value={competition.id}>
+                {competition.name} ({competition.externalId})
+              </option>
+            ))}
+          </select>
+          <Badge variant={selectedCompetition.lastSyncStatus === "succeeded" ? "default" : "secondary"}>
+            {selectedCompetition.lastSyncStatus ?? "unsynced"}
+          </Badge>
+        </div>
+        <div className="grid gap-2 text-sm md:grid-cols-3">
+          <MetricPill label="Last success" value={formatNullableTime(selectedCompetition.lastSuccessfulSyncAt)} />
+          <MetricPill label="Players" value={playerMetrics.length.toString()} />
+          <MetricPill label="Teams" value={teamMetrics.length.toString()} />
+        </div>
+        {syncError ? <p className="text-sm text-destructive">{errorText(syncError)}</p> : null}
+        {selectedCompetition.lastSyncError ? (
+          <p className="text-sm text-destructive">{selectedCompetition.lastSyncError}</p>
+        ) : null}
+        {mismatches.length > 0 ? <MismatchList metrics={mismatches} /> : null}
+        <TempleMetricPreview
+          syncRuns={syncRuns}
+          playerMetrics={playerMetrics}
+          teamMetrics={teamMetrics}
+          unmatchedIdentities={unmatchedIdentities}
+        />
+      </CardContent>
+    </Card>
+  )
+}
+
+function MetricPill({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border bg-background/40 p-3">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="truncate text-sm font-medium">{value}</p>
+    </div>
+  )
+}
+
+function MismatchList({ metrics }: { metrics: AdminExternalCompetitionTeamMetric[] }) {
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-accent/50 bg-accent/10 p-3">
+      {metrics.map((metric) => (
+        <div key={metric.id} className="flex items-center gap-2 text-sm">
+          <AlertTriangleIcon data-icon="inline-start" aria-hidden="true" />
+          <span className="min-w-0 truncate">
+            {metric.teamName} has no matching local team
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function TempleMetricPreview({
+  syncRuns,
+  playerMetrics,
+  teamMetrics,
+  unmatchedIdentities,
+}: {
+  syncRuns: AdminExternalCompetitionSyncRun[]
+  playerMetrics: AdminExternalCompetitionPlayerMetric[]
+  teamMetrics: AdminExternalCompetitionTeamMetric[]
+  unmatchedIdentities: AdminExternalCompetitionUnmatchedIdentity[]
+}) {
+  return (
+    <div className="grid gap-3 xl:grid-cols-2">
+      <PreviewList
+        title="Player Metrics"
+        rows={playerMetrics.slice(0, 6).map((metric) => ({
+          id: metric.id,
+          primary: metric.runeScapeName,
+          secondary: metric.localPlayerName ?? "unmatched",
+          value: formatNumber(metric.gainedValue),
+        }))}
+      />
+      <PreviewList
+        title="Team Metrics"
+        rows={teamMetrics.slice(0, 6).map((metric) => ({
+          id: metric.id,
+          primary: metric.teamName,
+          secondary: metric.localTeamName ?? "no local team",
+          value: formatNumber(metric.gainedValue),
+        }))}
+      />
+      <PreviewList
+        title="Unmatched"
+        rows={unmatchedIdentities.slice(0, 6).map((identity) => ({
+          id: identity.id,
+          primary: identity.displayName,
+          secondary: formatTimestamp(identity.lastSeenAt),
+          value: "review",
+        }))}
+      />
+      <PreviewList
+        title="Sync Runs"
+        rows={syncRuns.slice(0, 6).map((run) => ({
+          id: run.id,
+          primary: run.status,
+          secondary: formatTimestamp(run.startedAt),
+          value: run.rowsRead?.toString() ?? "0",
+        }))}
+      />
+    </div>
+  )
+}
+
+function PreviewList({
+  title,
+  rows,
+}: {
+  title: string
+  rows: { id: number; primary: string; secondary: string; value: string }[]
+}) {
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border bg-background/40 p-3">
+      <div className="flex items-center gap-2 text-sm font-medium">
+        <DatabaseIcon data-icon="inline-start" aria-hidden="true" />
+        {title}
+      </div>
+      {rows.length === 0 ? (
+        <p className="text-xs text-muted-foreground">No cached rows</p>
+      ) : (
+        rows.map((row) => (
+          <div key={row.id} className="grid grid-cols-[1fr_auto] gap-3 text-xs">
+            <div className="min-w-0">
+              <p className="truncate font-medium">{row.primary}</p>
+              <p className="truncate text-muted-foreground">{row.secondary}</p>
+            </div>
+            <span className="font-mono text-muted-foreground">{row.value}</span>
+          </div>
+        ))
+      )}
+    </div>
+  )
+}
+
 async function invalidateSetupQueries(
   queryClient: ReturnType<typeof useQueryClient>,
   slug: string,
@@ -458,6 +800,24 @@ async function invalidateSetupQueries(
     queryClient.invalidateQueries({ queryKey: ["admin-event-signups", slug] }),
     queryClient.invalidateQueries({ queryKey: ["admin-event-participants", slug] }),
   ])
+}
+
+async function invalidateExternalCompetitionQueries(
+  queryClient: ReturnType<typeof useQueryClient>,
+  slug: string,
+  competitionId: number,
+) {
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: ["admin-external-competitions", slug] }),
+    queryClient.invalidateQueries({ queryKey: ["admin-external-competition-sync-runs", competitionId] }),
+    queryClient.invalidateQueries({ queryKey: ["admin-external-competition-player-metrics", competitionId] }),
+    queryClient.invalidateQueries({ queryKey: ["admin-external-competition-team-metrics", competitionId] }),
+    queryClient.invalidateQueries({ queryKey: ["admin-external-competition-unmatched", competitionId] }),
+  ])
+}
+
+function formatNullableTime(value: string | null) {
+  return value ? formatTimestamp(value) : "Never"
 }
 
 function errorText(error: unknown) {

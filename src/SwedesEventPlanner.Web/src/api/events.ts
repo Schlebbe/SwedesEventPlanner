@@ -17,6 +17,7 @@ export type EventBoard = {
   event: EventSummary
   board: Board
   teams: EventBoardTeam[]
+  externalCompetitionFreshness: EventExternalCompetitionFreshness[]
 }
 
 export type Board = {
@@ -76,6 +77,16 @@ export type EventBoardTeam = {
   scoredTiers: number
   completedTiles: number
   currentValue: number
+}
+
+export type EventExternalCompetitionFreshness = {
+  id: number
+  provider: string
+  name: string
+  metricType: string
+  metricKey: string
+  lastSuccessfulSyncAt: string | null
+  lastSyncStatus: string | null
 }
 
 export type EventTeamListResponse = {

@@ -4,9 +4,11 @@ using Microsoft.Extensions.DependencyInjection;
 using SwedesEventPlanner.Application.Activity;
 using SwedesEventPlanner.Application.Admin;
 using SwedesEventPlanner.Application.Events;
+using SwedesEventPlanner.Application.ExternalCompetitions;
 using SwedesEventPlanner.Infrastructure.Activity;
 using SwedesEventPlanner.Infrastructure.Admin;
 using SwedesEventPlanner.Infrastructure.Events;
+using SwedesEventPlanner.Infrastructure.ExternalCompetitions;
 using SwedesEventPlanner.Infrastructure.Persistence;
 
 namespace SwedesEventPlanner.Infrastructure;
@@ -36,7 +38,16 @@ public static class DependencyInjection
         services.AddScoped<IActivityProcessingService, ActivityProcessingService>();
         services.AddScoped<IAdminDevSeedService, AdminDevSeedService>();
         services.AddScoped<IAdminEventSetupService, AdminEventSetupService>();
+        services.AddScoped<IExternalCompetitionSyncService, ExternalCompetitionSyncService>();
         services.AddScoped<IEventReadService, EventReadService>();
+        services.Configure<TempleOsrsOptions>(configuration.GetSection(TempleOsrsOptions.SectionName));
+        services.AddHttpClient<ITempleOsrsClient, TempleOsrsClient>((serviceProvider, client) =>
+        {
+            var options = serviceProvider
+                .GetRequiredService<Microsoft.Extensions.Options.IOptions<TempleOsrsOptions>>()
+                .Value;
+            TempleOsrsClient.ConfigureHttpClient(client, options);
+        });
 
         return services;
     }

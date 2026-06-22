@@ -665,9 +665,11 @@ public sealed class EventPlannerDbContext(DbContextOptions<EventPlannerDbContext
             entity.HasOne<BingoTileTier>().WithMany().HasForeignKey(contribution => contribution.TileTierId).OnDelete(DeleteBehavior.SetNull);
             entity.HasOne<TileRule>().WithMany().HasForeignKey(contribution => contribution.RuleId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne<EventTeam>().WithMany().HasForeignKey(contribution => contribution.TeamId).OnDelete(DeleteBehavior.SetNull);
-            entity.HasOne<Player>().WithMany().HasForeignKey(contribution => contribution.PlayerId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne<ActivityEvent>().WithMany().HasForeignKey(contribution => contribution.ActivityEventId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasIndex(contribution => new { contribution.EventId, contribution.TileId, contribution.RuleId, contribution.ActivityEventId }).IsUnique();
+            entity.HasOne<Player>().WithMany().HasForeignKey(contribution => contribution.PlayerId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne<ActivityEvent>().WithMany().HasForeignKey(contribution => contribution.ActivityEventId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(contribution => new { contribution.EventId, contribution.TileId, contribution.RuleId, contribution.ActivityEventId })
+                .IsUnique()
+                .HasFilter("activity_event_id IS NOT NULL");
         });
     }
 

@@ -6,6 +6,7 @@ import {
   getEventBoard,
   getEventContributions,
   getEventTeams,
+  type EventExternalCompetitionFreshness,
 } from "@/api/events"
 import {
   AppFrame,
@@ -18,7 +19,15 @@ import {
   StatusRail,
   TopNav,
 } from "@/components/event/EventUi"
-import { formatEventWindow } from "@/components/event/event-format"
+import { Badge } from "@/components/ui/badge"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+import { formatEventWindow, formatTimestamp } from "@/components/event/event-format"
 
 export function EventDetailPage() {
   const { eventSlug } = useParams()
@@ -61,6 +70,7 @@ export function EventDetailPage() {
     [boardQuery.data?.teams, teamsQuery.data?.teams],
   )
   const board = boardQuery.data?.board
+  const externalFreshness = boardQuery.data?.externalCompetitionFreshness ?? []
   const contributions = contributionsQuery.data?.contributions ?? []
 
   if (eventQuery.isError) {
@@ -119,8 +129,48 @@ export function EventDetailPage() {
             isLoading={contributionsQuery.isLoading}
             contributions={contributions}
           />
+          <ExternalFreshnessCard freshness={externalFreshness} />
         </div>
       </section>
     </AppFrame>
+  )
+}
+
+function ExternalFreshnessCard({
+  freshness,
+}: {
+  freshness: EventExternalCompetitionFreshness[]
+}) {
+  if (freshness.length === 0) {
+    return null
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>TempleOSRS</CardTitle>
+        <CardDescription>Cached sync freshness</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        {freshness.map((item) => (
+          <div key={item.id} className="flex items-center justify-between gap-3 text-sm">
+            <div className="min-w-0">
+              <p className="truncate font-medium">{item.name}</p>
+              <p className="truncate text-xs text-muted-foreground">
+                {item.metricType} · {item.metricKey}
+              </p>
+            </div>
+            <div className="flex flex-col items-end gap-1">
+              <Badge variant={item.lastSyncStatus === "succeeded" ? "default" : "secondary"}>
+                {item.lastSyncStatus ?? "unsynced"}
+              </Badge>
+              <span className="text-xs text-muted-foreground">
+                {item.lastSuccessfulSyncAt ? formatTimestamp(item.lastSuccessfulSyncAt) : "Never"}
+              </span>
+            </div>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
   )
 }
