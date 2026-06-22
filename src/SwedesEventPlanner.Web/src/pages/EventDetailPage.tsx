@@ -214,8 +214,8 @@ function ExternalRefreshCard({
     .map((competition) => competition.nextRefreshAvailableAt)
     .find(Boolean)
   const freshnessCooldowns = freshness
-    .map((item) => cooldownUntil(item.lastSuccessfulSyncAt))
-    .filter((value): value is string => value !== null)
+    .map((item) => item.nextPublicSyncAvailableAt)
+    .filter((value): value is string => value !== null && new Date(value).getTime() > refreshClockMs)
   const freshnessNextRefreshAt =
     freshness.length > 0 && freshnessCooldowns.length === freshness.length
       ? freshnessCooldowns.sort()[0]
@@ -279,13 +279,4 @@ function ExternalRefreshCard({
       </CardContent>
     </Card>
   )
-}
-
-function cooldownUntil(lastSuccessfulSyncAt: string | null) {
-  if (!lastSuccessfulSyncAt) {
-    return null
-  }
-
-  const nextRefreshAt = new Date(new Date(lastSuccessfulSyncAt).getTime() + 5 * 60 * 1000)
-  return nextRefreshAt.getTime() > Date.now() ? nextRefreshAt.toISOString() : null
 }

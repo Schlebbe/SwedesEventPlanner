@@ -116,6 +116,65 @@ public sealed class ActivityProcessingServiceTests
     }
 
     [Fact]
+    public async Task Later_tier_can_be_achieved_before_earlier_required_tier_but_scores_only_after_earlier_tier()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedEventAsync(dbContext, ruleType: RuleTypes.ItemCount, required: 1);
+        var tile = await dbContext.BingoTiles.SingleAsync();
+        var laterTier = new BingoTileTier
+        {
+            TileId = tile.Id,
+            TierNumber = 2,
+            Title = "Tier 2",
+            ScoreValue = 3,
+            SortOrder = 2,
+            IsRequiredForBoardCompletion = true
+        };
+        dbContext.BingoTileTiers.Add(laterTier);
+        await dbContext.SaveChangesAsync();
+        dbContext.TileRules.Add(new TileRule
+        {
+            TileId = tile.Id,
+            TileTierId = laterTier.Id,
+            RuleType = RuleTypes.ItemCount,
+            Scope = RuleScopes.Team,
+            IsActive = true,
+            ConfigJson = JsonSerializer.Serialize(new
+            {
+                activityType = ActivityTypes.ItemDrop,
+                itemIds = new[] { 22486 },
+                duplicatesCount = true,
+                required = 1
+            }),
+            CreatedAt = TestNow
+        });
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateProcessingService(dbContext);
+        var laterActivity = await AddItemActivityAsync(dbContext, fixture.Player.Id, itemId: 22486);
+        await service.ProcessActivityAsync(laterActivity.Id, CancellationToken.None);
+
+        var tierRowsAfterLater = await dbContext.EventTileTierProgress
+            .OrderBy(progress => progress.TileTierId)
+            .ToListAsync();
+        var laterProgress = Assert.Single(tierRowsAfterLater);
+        Assert.True(laterProgress.IsAchieved);
+        Assert.False(laterProgress.IsScored);
+        Assert.Equal(0, laterProgress.ScoreAwarded);
+
+        var earlierActivity = await AddItemActivityAsync(dbContext, fixture.Player.Id, itemId: 4151);
+        await service.ProcessActivityAsync(earlierActivity.Id, CancellationToken.None);
+
+        var scoredRows = await dbContext.EventTileTierProgress
+            .OrderBy(progress => progress.TileTierId)
+            .ToListAsync();
+        Assert.Equal(2, scoredRows.Count);
+        Assert.All(scoredRows, progress => Assert.True(progress.IsScored));
+        Assert.Equal(4, scoredRows.Sum(progress => progress.ScoreAwarded));
+        Assert.True((await dbContext.EventTileProgress.SingleAsync()).IsCompleted);
+    }
+
+    [Fact]
     public async Task Duplicate_dedupe_key_does_not_double_count()
     {
         await using var dbContext = CreateDbContext();

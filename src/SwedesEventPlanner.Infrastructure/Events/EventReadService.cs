@@ -1,10 +1,10 @@
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using SwedesEventPlanner.Application.Events;
 using SwedesEventPlanner.Contracts.Events;
 using SwedesEventPlanner.Domain.Bingo;
 using SwedesEventPlanner.Domain.Events;
 using SwedesEventPlanner.Domain.ExternalCompetitions;
+using SwedesEventPlanner.Infrastructure.Bingo;
 using SwedesEventPlanner.Infrastructure.Persistence;
 
 namespace SwedesEventPlanner.Infrastructure.Events;
@@ -122,7 +122,8 @@ public sealed class EventReadService(EventPlannerDbContext dbContext) : IEventRe
                 competition.MetricType,
                 competition.MetricKey,
                 competition.LastSuccessfulSyncAt,
-                competition.LastSyncStatus))
+                competition.LastSyncStatus,
+                competition.NextPublicSyncAvailableAt))
             .ToListAsync(cancellationToken);
 
         var boardTiles = tiles
@@ -244,7 +245,8 @@ public sealed class EventReadService(EventPlannerDbContext dbContext) : IEventRe
         var boundedLimit = Math.Clamp(limit, 1, 100);
         var contributions = await (
                 from contribution in dbContext.EventProgressContributions.AsNoTracking()
-                join player in dbContext.Players.AsNoTracking() on contribution.PlayerId equals player.Id
+                join player in dbContext.Players.AsNoTracking() on contribution.PlayerId equals player.Id into playerJoin
+                from player in playerJoin.DefaultIfEmpty()
                 join tile in dbContext.BingoTiles.AsNoTracking() on contribution.TileId equals tile.Id
                 join tier in dbContext.BingoTileTiers.AsNoTracking() on contribution.TileTierId equals tier.Id into tierJoin
                 from tier in tierJoin.DefaultIfEmpty()
@@ -254,7 +256,7 @@ public sealed class EventReadService(EventPlannerDbContext dbContext) : IEventRe
                 orderby contribution.CreatedAt descending, contribution.Id descending
                 select new EventContributionResponse(
                     contribution.Id,
-                    player.DisplayName,
+                    player == null ? "TempleOSRS sync" : player.DisplayName,
                     contribution.TeamId,
                     team == null ? null : team.Name,
                     tile.Title,
@@ -346,31 +348,6 @@ public sealed class EventReadService(EventPlannerDbContext dbContext) : IEventRe
             return null;
         }
 
-        using var config = JsonDocument.Parse(rule.ConfigJson);
-
-        if (config.RootElement.TryGetProperty("required", out var requiredElement) &&
-            requiredElement.ValueKind == JsonValueKind.Number)
-        {
-            return requiredElement.GetDecimal();
-        }
-
-        if (!config.RootElement.TryGetProperty("tiers", out var tiersElement) ||
-            tiersElement.ValueKind != JsonValueKind.Array)
-        {
-            return null;
-        }
-
-        foreach (var tierElement in tiersElement.EnumerateArray())
-        {
-            if (tierElement.TryGetProperty("tier", out var tierNumberElement) &&
-                tierNumberElement.GetInt32() == tier.TierNumber &&
-                tierElement.TryGetProperty("required", out var tierRequiredElement) &&
-                tierRequiredElement.ValueKind == JsonValueKind.Number)
-            {
-                return tierRequiredElement.GetDecimal();
-            }
-        }
-
-        return null;
+        return TierProgressScoringService.GetRequiredValue(rule.ConfigJson, tier.TierNumber);
     }
 }

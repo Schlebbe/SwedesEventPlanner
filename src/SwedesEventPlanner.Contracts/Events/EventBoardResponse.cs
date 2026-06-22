@@ -74,4 +74,5 @@ public sealed record EventExternalCompetitionFreshnessResponse(
     string MetricType,
     string MetricKey,
     DateTimeOffset? LastSuccessfulSyncAt,
-    string? LastSyncStatus);
+    string? LastSyncStatus,
+    DateTimeOffset? NextPublicSyncAvailableAt);

@@ -16,14 +16,21 @@ public static class ServiceInfoEndpoints
         {
             cancellationToken.ThrowIfCancellationRequested();
 
+            var endpoints = new List<string>
+            {
+                "/api/events",
+                "/api/admin/status",
+            };
+
+            if (environment.IsDevelopment())
+            {
+                endpoints.Add("/api/activity");
+            }
+
             return TypedResults.Ok(new ServiceInfoResponse(
                 "Swedes Event Planner",
                 environment.EnvironmentName,
-                [
-                    "/api/events",
-                    "/api/admin/status",
-                    "/api/activity",
-                ]));
+                endpoints.ToArray()));
         })
         .WithName("GetServiceInfo")
         .WithSummary("Get API service information.")

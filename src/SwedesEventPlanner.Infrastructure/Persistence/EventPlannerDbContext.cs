@@ -611,7 +611,18 @@ public sealed class EventPlannerDbContext(DbContextOptions<EventPlannerDbContext
             entity.HasOne<BingoTile>().WithMany().HasForeignKey(progress => progress.TileId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne<EventTeam>().WithMany().HasForeignKey(progress => progress.TeamId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne<Player>().WithMany().HasForeignKey(progress => progress.PlayerId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasIndex(progress => new { progress.EventId, progress.TileId, progress.TeamId, progress.PlayerId }).IsUnique();
+            entity.HasIndex(progress => new { progress.EventId, progress.TileId })
+                .HasDatabaseName("ux_event_tile_progress_event_scope")
+                .IsUnique()
+                .HasFilter("team_id IS NULL AND player_id IS NULL");
+            entity.HasIndex(progress => new { progress.EventId, progress.TileId, progress.TeamId })
+                .HasDatabaseName("ux_event_tile_progress_team_scope")
+                .IsUnique()
+                .HasFilter("team_id IS NOT NULL AND player_id IS NULL");
+            entity.HasIndex(progress => new { progress.EventId, progress.TileId, progress.PlayerId })
+                .HasDatabaseName("ux_event_tile_progress_player_scope")
+                .IsUnique()
+                .HasFilter("team_id IS NULL AND player_id IS NOT NULL");
         });
 
         modelBuilder.Entity<EventTileTierProgress>(entity =>
@@ -639,7 +650,18 @@ public sealed class EventPlannerDbContext(DbContextOptions<EventPlannerDbContext
             entity.HasOne<BingoTileTier>().WithMany().HasForeignKey(progress => progress.TileTierId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne<EventTeam>().WithMany().HasForeignKey(progress => progress.TeamId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne<Player>().WithMany().HasForeignKey(progress => progress.PlayerId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasIndex(progress => new { progress.EventId, progress.TileTierId, progress.TeamId, progress.PlayerId }).IsUnique();
+            entity.HasIndex(progress => new { progress.EventId, progress.TileTierId })
+                .HasDatabaseName("ux_event_tile_tier_progress_event_scope")
+                .IsUnique()
+                .HasFilter("team_id IS NULL AND player_id IS NULL");
+            entity.HasIndex(progress => new { progress.EventId, progress.TileTierId, progress.TeamId })
+                .HasDatabaseName("ux_event_tile_tier_progress_team_scope")
+                .IsUnique()
+                .HasFilter("team_id IS NOT NULL AND player_id IS NULL");
+            entity.HasIndex(progress => new { progress.EventId, progress.TileTierId, progress.PlayerId })
+                .HasDatabaseName("ux_event_tile_tier_progress_player_scope")
+                .IsUnique()
+                .HasFilter("team_id IS NULL AND player_id IS NOT NULL");
         });
 
         modelBuilder.Entity<EventProgressContribution>(entity =>

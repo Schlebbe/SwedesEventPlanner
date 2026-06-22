@@ -87,6 +87,7 @@ export type EventExternalCompetitionFreshness = {
   metricKey: string
   lastSuccessfulSyncAt: string | null
   lastSyncStatus: string | null
+  nextPublicSyncAvailableAt: string | null
 }
 
 export type EventTempleRefreshResponse = {

@@ -7,6 +7,7 @@ using SwedesEventPlanner.Application.Clock;
 using SwedesEventPlanner.Domain.Activity;
 using SwedesEventPlanner.Domain.Bingo;
 using SwedesEventPlanner.Domain.Events;
+using SwedesEventPlanner.Infrastructure.Bingo;
 using SwedesEventPlanner.Infrastructure.Persistence;
 
 namespace SwedesEventPlanner.Infrastructure.Activity;
@@ -419,7 +420,6 @@ public sealed class ActivityProcessingService(
         {
             var tier = await dbContext.BingoTileTiers
                 .SingleAsync(candidate => candidate.Id == rule.TileTierId.Value, cancellationToken);
-            var requiredValue = GetRequiredValue(rule.ConfigJson, tier.TierNumber);
 
             var tierProgress = await FindTileTierProgressAsync(
                 participation.EventId,
@@ -446,35 +446,15 @@ public sealed class ActivityProcessingService(
             tierProgress.CurrentValue += evaluation.ValueAdded;
             tierProgress.UpdatedAt = now;
 
-            if (requiredValue.HasValue && tierProgress.CurrentValue >= requiredValue.Value)
-            {
-                if (!tierProgress.IsAchieved)
-                {
-                    tierProgress.IsAchieved = true;
-                    tierProgress.AchievedAt = now;
-                }
+            await dbContext.SaveChangesAsync(cancellationToken);
 
-                if (!tierProgress.IsScored)
-                {
-                    tierProgress.IsScored = true;
-                    tierProgress.ScoredAt = now;
-                    tierProgress.ScoreAwarded = tier.ScoreValue;
-                }
-
-                tileProgress.CurrentTier = Math.Max(tileProgress.CurrentTier, tier.TierNumber);
-            }
-
-            tileProgress.IsCompleted = await IsTileCompletedAsync(
+            await new TierProgressScoringService(dbContext).RecalculateTileScopeAsync(
                 participation.EventId,
                 rule.TileId,
                 progressTeamId,
                 progressPlayerId,
+                now,
                 cancellationToken);
-
-            if (tileProgress.IsCompleted && tileProgress.CompletedAt is null)
-            {
-                tileProgress.CompletedAt = now;
-            }
         }
     }
 
@@ -510,35 +490,6 @@ public sealed class ActivityProcessingService(
                     progress.TeamId == teamId &&
                     progress.PlayerId == playerId,
                 cancellationToken);
-    }
-
-    private async Task<bool> IsTileCompletedAsync(
-        long eventId,
-        long tileId,
-        long? teamId,
-        long? playerId,
-        CancellationToken cancellationToken)
-    {
-        var requiredTierIds = await dbContext.BingoTileTiers
-            .Where(tier => tier.TileId == tileId && tier.IsRequiredForBoardCompletion)
-            .Select(tier => tier.Id)
-            .ToListAsync(cancellationToken);
-
-        if (requiredTierIds.Count == 0)
-        {
-            return false;
-        }
-
-        var scoredTierIds = await dbContext.EventTileTierProgress
-            .Where(progress => progress.EventId == eventId &&
-                progress.TileId == tileId &&
-                progress.TeamId == teamId &&
-                progress.PlayerId == playerId &&
-                progress.IsScored)
-            .Select(progress => progress.TileTierId)
-            .ToListAsync(cancellationToken);
-
-        return requiredTierIds.All(scoredTierIds.Contains);
     }
 
     private async Task<HashSet<int>> GetConfiguredItemIdsAsync(
@@ -648,36 +599,6 @@ public sealed class ActivityProcessingService(
         }
 
         return true;
-    }
-
-    private static decimal? GetRequiredValue(string configJson, int tierNumber)
-    {
-        using var config = ParseRuleConfig(configJson);
-
-        if (config.RootElement.TryGetProperty("required", out var requiredElement) &&
-            requiredElement.ValueKind == JsonValueKind.Number)
-        {
-            return requiredElement.GetDecimal();
-        }
-
-        if (!config.RootElement.TryGetProperty("tiers", out var tiersElement) ||
-            tiersElement.ValueKind != JsonValueKind.Array)
-        {
-            return null;
-        }
-
-        foreach (var tierElement in tiersElement.EnumerateArray())
-        {
-            if (tierElement.TryGetProperty("tier", out var tierNumberElement) &&
-                tierNumberElement.GetInt32() == tierNumber &&
-                tierElement.TryGetProperty("required", out var tierRequiredElement) &&
-                tierRequiredElement.ValueKind == JsonValueKind.Number)
-            {
-                return tierRequiredElement.GetDecimal();
-            }
-        }
-
-        return null;
     }
 
     private static JsonDocument ParseRuleConfig(string configJson)

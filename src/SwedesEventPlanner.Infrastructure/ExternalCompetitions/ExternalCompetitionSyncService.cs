@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using SwedesEventPlanner.Application.Admin;
 using SwedesEventPlanner.Application.Clock;
 using SwedesEventPlanner.Application.ExternalCompetitions;
@@ -12,6 +13,7 @@ using SwedesEventPlanner.Domain.Common;
 using SwedesEventPlanner.Domain.Events;
 using SwedesEventPlanner.Domain.ExternalCompetitions;
 using SwedesEventPlanner.Domain.Players;
+using SwedesEventPlanner.Infrastructure.Bingo;
 using SwedesEventPlanner.Infrastructure.Persistence;
 
 namespace SwedesEventPlanner.Infrastructure.ExternalCompetitions;
@@ -20,11 +22,14 @@ public sealed class ExternalCompetitionSyncService(
     EventPlannerDbContext dbContext,
     ITempleOsrsClient templeClient,
     IClock clock,
+    IOptions<TempleOsrsOptions> options,
     ILogger<ExternalCompetitionSyncService> logger) : IExternalCompetitionSyncService
 {
-    private static readonly TimeSpan PublicRefreshCooldown = TimeSpan.FromMinutes(5);
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly ConcurrentDictionary<long, SemaphoreSlim> SyncLocks = new();
+
+    private TimeSpan PublicRefreshCooldown =>
+        TimeSpan.FromMinutes(Math.Max(0, options.Value.PublicRefreshCooldownMinutes));
 
     public async Task<AdminExternalCompetitionResponse?> LinkTempleCompetitionAsync(
         string eventSlug,
@@ -624,14 +629,11 @@ public sealed class ExternalCompetitionSyncService(
             return delta == 0 ? 0 : 1;
         }
 
-        var tier = await dbContext.BingoTileTiers.SingleAsync(
-            candidate => candidate.Id == rule.TileTierId.Value,
-            cancellationToken);
-        var requiredValue = GetRequiredValue(rule.ConfigJson, tier.TierNumber);
+        var tileTierId = rule.TileTierId.Value;
         var tierProgress = await dbContext.EventTileTierProgress.SingleOrDefaultAsync(
             candidate => candidate.EventId == eventId &&
                 candidate.TileId == rule.TileId &&
-                candidate.TileTierId == tier.Id &&
+                candidate.TileTierId == tileTierId &&
                 candidate.TeamId == teamId &&
                 candidate.PlayerId == playerId,
             cancellationToken);
@@ -642,7 +644,7 @@ public sealed class ExternalCompetitionSyncService(
             {
                 EventId = eventId,
                 TileId = rule.TileId,
-                TileTierId = tier.Id,
+                TileTierId = tileTierId,
                 TeamId = teamId,
                 PlayerId = playerId,
                 UpdatedAt = now
@@ -654,49 +656,15 @@ public sealed class ExternalCompetitionSyncService(
         tierProgress.UpdatedAt = now;
         tierProgress.MetadataJson = JsonSerializer.Serialize(new { source = RuleTypes.ExternalCompetitionMetric, syncRunId }, JsonOptions);
 
-        var achieved = requiredValue.HasValue && currentValue >= requiredValue.Value;
-        tierProgress.IsAchieved = achieved;
-        tierProgress.AchievedAt = achieved ? tierProgress.AchievedAt ?? now : null;
-        tierProgress.IsScored = achieved;
-        tierProgress.ScoredAt = achieved ? tierProgress.ScoredAt ?? now : null;
-        tierProgress.ScoreAwarded = achieved ? tier.ScoreValue : 0;
+        await dbContext.SaveChangesAsync(cancellationToken);
 
-        var achievedTiers = await dbContext.EventTileTierProgress
-            .Where(candidate => candidate.EventId == eventId &&
-                candidate.TileId == rule.TileId &&
-                candidate.TeamId == teamId &&
-                candidate.PlayerId == playerId &&
-                candidate.TileTierId != tier.Id &&
-                candidate.IsAchieved)
-            .Join(dbContext.BingoTileTiers, progressRow => progressRow.TileTierId, tierRow => tierRow.Id, (_, tierRow) => tierRow.TierNumber)
-            .ToListAsync(cancellationToken);
-        if (achieved)
-        {
-            achievedTiers.Add(tier.TierNumber);
-        }
-
-        progress.CurrentTier = achievedTiers.Count == 0 ? 0 : achievedTiers.Max();
-
-        var requiredTierIds = await dbContext.BingoTileTiers
-            .Where(candidate => candidate.TileId == rule.TileId && candidate.IsRequiredForBoardCompletion)
-            .Select(candidate => candidate.Id)
-            .ToListAsync(cancellationToken);
-        var scoredTierIds = await dbContext.EventTileTierProgress
-            .Where(candidate => candidate.EventId == eventId &&
-                candidate.TileId == rule.TileId &&
-                candidate.TeamId == teamId &&
-                candidate.PlayerId == playerId &&
-                candidate.TileTierId != tier.Id &&
-                candidate.IsScored)
-            .Select(candidate => candidate.TileTierId)
-            .ToListAsync(cancellationToken);
-        if (achieved)
-        {
-            scoredTierIds.Add(tier.Id);
-        }
-
-        progress.IsCompleted = requiredTierIds.Count > 0 && requiredTierIds.All(scoredTierIds.Contains);
-        progress.CompletedAt = progress.IsCompleted ? progress.CompletedAt ?? now : null;
+        await new TierProgressScoringService(dbContext).RecalculateTileScopeAsync(
+            eventId,
+            rule.TileId,
+            teamId,
+            playerId,
+            now,
+            cancellationToken);
 
         return delta == 0 ? 0 : 1;
     }
@@ -860,35 +828,6 @@ public sealed class ExternalCompetitionSyncService(
         return !element.TryGetProperty(propertyName, out var property) ||
             property.ValueKind != JsonValueKind.String ||
             string.Equals(property.GetString(), value, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static decimal? GetRequiredValue(string configJson, int tierNumber)
-    {
-        using var config = JsonDocument.Parse(string.IsNullOrWhiteSpace(configJson) ? "{}" : configJson);
-        if (config.RootElement.TryGetProperty("required", out var requiredElement) &&
-            requiredElement.ValueKind == JsonValueKind.Number)
-        {
-            return requiredElement.GetDecimal();
-        }
-
-        if (!config.RootElement.TryGetProperty("tiers", out var tiersElement) ||
-            tiersElement.ValueKind != JsonValueKind.Array)
-        {
-            return null;
-        }
-
-        foreach (var tierElement in tiersElement.EnumerateArray())
-        {
-            if (tierElement.TryGetProperty("tier", out var tierNumberElement) &&
-                tierNumberElement.GetInt32() == tierNumber &&
-                tierElement.TryGetProperty("required", out var tierRequiredElement) &&
-                tierRequiredElement.ValueKind == JsonValueKind.Number)
-            {
-                return tierRequiredElement.GetDecimal();
-            }
-        }
-
-        return null;
     }
 
     private static AdminExternalCompetitionResponse MapCompetition(ExternalCompetition competition)

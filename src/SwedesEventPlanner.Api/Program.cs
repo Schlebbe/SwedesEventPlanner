@@ -92,7 +92,11 @@ public static class Program
         app.MapServiceInfoEndpoints();
         app.MapEventEndpoints();
         app.MapAdminEndpoints();
-        app.MapActivityEndpoints();
+
+        if (app.Environment.IsDevelopment())
+        {
+            app.MapActivityEndpoints();
+        }
 
         if (!app.Environment.IsDevelopment())
         {

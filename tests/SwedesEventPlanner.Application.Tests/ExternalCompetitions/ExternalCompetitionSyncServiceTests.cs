@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using SwedesEventPlanner.Application.Clock;
 using SwedesEventPlanner.Application.ExternalCompetitions;
 using SwedesEventPlanner.Contracts.Admin;
@@ -197,6 +198,22 @@ public sealed class ExternalCompetitionSyncServiceTests
     }
 
     [Fact]
+    public async Task Public_refresh_uses_configured_cooldown_minutes()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedEventAsync(dbContext);
+        var client = new FakeTempleClient(IndividualInfo([Participant("Sebbe", 100)]));
+        var service = CreateService(dbContext, client, publicRefreshCooldownMinutes: 2);
+        await LinkCompetitionAsync(service, fixture);
+
+        var response = await service.RequestPublicRefreshAsync(fixture.Event.Slug, CancellationToken.None);
+
+        Assert.NotNull(response);
+        var competition = Assert.Single(response.Competitions);
+        Assert.Equal(TestNow.AddMinutes(2), competition.NextRefreshAvailableAt);
+    }
+
+    [Fact]
     public async Task Public_refresh_does_not_start_duplicate_active_sync()
     {
         await using var dbContext = CreateDbContext();
@@ -255,12 +272,17 @@ public sealed class ExternalCompetitionSyncServiceTests
 
     private static ExternalCompetitionSyncService CreateService(
         EventPlannerDbContext dbContext,
-        FakeTempleClient client)
+        FakeTempleClient client,
+        int publicRefreshCooldownMinutes = 5)
     {
         return new ExternalCompetitionSyncService(
             dbContext,
             client,
             new FixedClock(TestNow),
+            Options.Create(new TempleOsrsOptions
+            {
+                PublicRefreshCooldownMinutes = publicRefreshCooldownMinutes
+            }),
             NullLogger<ExternalCompetitionSyncService>.Instance);
     }
 

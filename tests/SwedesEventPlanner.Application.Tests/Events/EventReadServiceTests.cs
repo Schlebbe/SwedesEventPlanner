@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using SwedesEventPlanner.Domain.Activity;
 using SwedesEventPlanner.Domain.Bingo;
 using SwedesEventPlanner.Domain.Events;
+using SwedesEventPlanner.Domain.ExternalCompetitions;
 using SwedesEventPlanner.Domain.Players;
 using SwedesEventPlanner.Infrastructure.Events;
 using SwedesEventPlanner.Infrastructure.Persistence;
@@ -71,6 +72,71 @@ public sealed class EventReadServiceTests
         Assert.DoesNotContain("metadataJson", json);
         Assert.DoesNotContain("configJson", json);
         Assert.DoesNotContain("dedupe", json, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Contribution_feed_shows_team_level_temple_sync_rows_without_player()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedProgressAsync(dbContext);
+        var tile = await dbContext.BingoTiles.SingleAsync();
+        var tier = await dbContext.BingoTileTiers.SingleAsync();
+        var rule = await dbContext.TileRules.SingleAsync();
+        dbContext.EventProgressContributions.Add(new EventProgressContribution
+        {
+            EventId = (await dbContext.Events.SingleAsync()).Id,
+            TileId = tile.Id,
+            TileTierId = tier.Id,
+            RuleId = rule.Id,
+            TeamId = fixture.TeamId,
+            PlayerId = null,
+            ActivityEventId = null,
+            ValueAdded = 100,
+            Description = "TempleOSRS sync adjustment.",
+            CreatedAt = TestNow.AddMinutes(1),
+            MetadataJson = """{"source":"external_competition_metric"}"""
+        });
+        await dbContext.SaveChangesAsync();
+        var service = new EventReadService(dbContext);
+
+        var response = await service.GetContributionsAsync(fixture.EventSlug, limit: 10, CancellationToken.None);
+
+        Assert.NotNull(response);
+        var templeContribution = response.Contributions.First();
+        Assert.Equal("TempleOSRS sync", templeContribution.PlayerName);
+        Assert.Equal("Blue", templeContribution.TeamName);
+        Assert.Equal(100m, templeContribution.ValueAdded);
+    }
+
+    [Fact]
+    public async Task Board_response_includes_public_external_competition_refresh_availability()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedProgressAsync(dbContext);
+        var eventDefinition = await dbContext.Events.SingleAsync();
+        var nextAvailableAt = TestNow.AddMinutes(5);
+        dbContext.ExternalCompetitions.Add(new ExternalCompetition
+        {
+            EventId = eventDefinition.Id,
+            Provider = ExternalCompetitionProviders.TempleOsrs,
+            ExternalId = "12345",
+            Name = "TempleOSRS Competition",
+            MetricType = "xp",
+            MetricKey = "overall",
+            Status = ExternalCompetitionStatuses.Active,
+            LastSuccessfulSyncAt = TestNow,
+            LastSyncStatus = ExternalCompetitionSyncRunStatuses.Succeeded,
+            NextPublicSyncAvailableAt = nextAvailableAt,
+            CreatedAt = TestNow
+        });
+        await dbContext.SaveChangesAsync();
+        var service = new EventReadService(dbContext);
+
+        var response = await service.GetBoardAsync(fixture.EventSlug, CancellationToken.None);
+
+        Assert.NotNull(response);
+        var freshness = Assert.Single(response.ExternalCompetitionFreshness);
+        Assert.Equal(nextAvailableAt, freshness.NextPublicSyncAvailableAt);
     }
 
     private static readonly DateTimeOffset TestNow = new(2026, 7, 2, 18, 30, 0, TimeSpan.Zero);
