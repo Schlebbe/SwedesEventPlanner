@@ -1,4 +1,5 @@
 @baseUrl = http://localhost:5000
+@adminToken = dev-admin-token-change-me
 
 ### Liveness
 GET {{baseUrl}}/health
@@ -26,9 +27,46 @@ GET {{baseUrl}}/api/events/local-mock-activity-demo/contributions
 
 ### Admin/testing status
 GET {{baseUrl}}/api/admin/status
+Authorization: Bearer {{adminToken}}
+
+### Import CSV event signups
+POST {{baseUrl}}/api/admin/events/local-mock-activity-demo/signups/import-csv
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "csvText": "Timestamp,Email Address,RuneScape Name,Availability,Daily Hours,Preferred Content,Notes,Team Preference\n2026-07-02T17:30:00Z,player@example.invalid,Sebbe,Evenings,3,Raids,Ready,Blue"
+}
+
+### List event signups
+GET {{baseUrl}}/api/admin/events/local-mock-activity-demo/signups
+Authorization: Bearer {{adminToken}}
+
+### List event participants
+GET {{baseUrl}}/api/admin/events/local-mock-activity-demo/participants
+Authorization: Bearer {{adminToken}}
+
+### Create event team
+POST {{baseUrl}}/api/admin/events/local-mock-activity-demo/teams
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "name": "Blue"
+}
+
+### Assign participant team
+POST {{baseUrl}}/api/admin/events/local-mock-activity-demo/participants/1/assign-team
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "teamId": 1
+}
 
 ### Seed local mock activity demo data
 POST {{baseUrl}}/api/admin/dev/seed-mock-activity-demo
+Authorization: Bearer {{adminToken}}
 
 ### Mock activity endpoint
 POST {{baseUrl}}/api/activity
