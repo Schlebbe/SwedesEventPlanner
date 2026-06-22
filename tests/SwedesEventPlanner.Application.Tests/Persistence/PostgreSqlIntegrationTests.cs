@@ -318,10 +318,22 @@ public sealed class PostgreSqlIntegrationFactAttribute : FactAttribute
 {
     public PostgreSqlIntegrationFactAttribute()
     {
+        if (RequiresDocker())
+        {
+            return;
+        }
+
         if (!IsDockerAvailable())
         {
             Skip = "PostgreSQL integration tests require Docker/Testcontainers.";
         }
+    }
+
+    private static bool RequiresDocker()
+    {
+        var value = Environment.GetEnvironmentVariable("SWEDES_RUN_POSTGRES_INTEGRATION");
+        return string.Equals(value, "1", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsDockerAvailable()
