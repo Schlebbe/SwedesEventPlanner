@@ -11,6 +11,7 @@ import {
 } from "lucide-react"
 import type {
   BoardTile,
+  BoardTileTeamProgress,
   BoardTileTier,
   EventContribution,
   EventSummary,
@@ -74,7 +75,7 @@ export function TopNav({ activeSlug }: { activeSlug?: string }) {
     <nav className="flex flex-wrap items-center gap-2">
       <NavItem to="/events">Events</NavItem>
       {activeSlug ? <NavItem to={`/events/${activeSlug}`}>Board</NavItem> : null}
-      {activeSlug ? <NavItem to={`/admin/events/${activeSlug}/setup`}>Setup</NavItem> : null}
+      {activeSlug ? <NavItem to={`/admin/events/${activeSlug}/setup`}>Admin Setup</NavItem> : null}
     </nav>
   )
 }
@@ -114,17 +115,61 @@ export function EventHero({
   teams: EventTeamSummary[]
 }) {
   const topTeam = teams[0]
+  const maxScore = Math.max(1, ...teams.map((team) => team.score))
 
   return (
-    <div className="grid gap-3 md:grid-cols-3">
-      <MetricCard title="Status" value={event.status} icon={ActivityIcon} />
-      <MetricCard title="Teams" value={teams.length.toString()} icon={ShieldIcon} />
-      <MetricCard
-        title="Leader"
-        value={topTeam ? `${topTeam.name} · ${topTeam.score}` : "No score"}
-        icon={TrophyIcon}
-      />
-    </div>
+    <Card>
+      <CardHeader className="border-b">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div className="min-w-0">
+            <CardTitle>Scoreboard</CardTitle>
+            <CardDescription>
+              {topTeam ? `${topTeam.name} leads with ${topTeam.score} point(s)` : "No scored tiers yet"}
+            </CardDescription>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Badge variant="outline">
+              <ActivityIcon data-icon="inline-start" aria-hidden="true" />
+              {event.status}
+            </Badge>
+            <Badge variant="outline">
+              <ShieldIcon data-icon="inline-start" aria-hidden="true" />
+              {teams.length} teams
+            </Badge>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        {teams.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Teams will appear when the event is seeded.</p>
+        ) : (
+          teams.slice(0, 5).map((team, index) => (
+            <div key={team.id} className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span
+                    className={cn("size-2 rounded-sm", teamToneClasses[index % teamToneClasses.length])}
+                    aria-hidden="true"
+                  />
+                  <span className="truncate text-sm font-medium">{team.name}</span>
+                  {index === 0 ? <TrophyIcon className="size-3.5 text-accent" aria-hidden="true" /> : null}
+                </div>
+                <Progress
+                  className="mt-2 h-1.5"
+                  value={(team.score / maxScore) * 100}
+                  aria-label={`${team.name} score share`}
+                />
+              </div>
+              <div className="flex gap-3 text-xs text-muted-foreground md:justify-end">
+                <span className="tabular-nums">{team.score} pts</span>
+                <span className="tabular-nums">{team.completedTiles} tiles</span>
+                <span className="tabular-nums">{formatNumber(team.currentValue)} total</span>
+              </div>
+            </div>
+          ))
+        )}
+      </CardContent>
+    </Card>
   )
 }
 
@@ -150,7 +195,19 @@ export function BoardTileCard({
   tile: BoardTile
   teams: EventTeamSummary[]
 }) {
-  const primaryProgress = tile.teamProgress[0]
+  const completedTeams = tile.teamProgress.filter((progress) => progress.isCompleted).length
+  const fallbackProgress: BoardTileTeamProgress = {
+    teamId: 0,
+    teamName: "",
+    currentValue: 0,
+    currentTier: 0,
+    isCompleted: false,
+    completedAt: null,
+  }
+  const topProgress = tile.teamProgress.reduce(
+    (current, candidate) => (candidate.currentValue > current.currentValue ? candidate : current),
+    tile.teamProgress[0] ?? fallbackProgress,
+  )
 
   return (
     <Card>
@@ -160,10 +217,10 @@ export function BoardTileCard({
             <CardTitle className="truncate">{tile.title}</CardTitle>
             <CardDescription>{tile.description ?? "Progress tile"}</CardDescription>
           </div>
-          {primaryProgress?.isCompleted ? (
-            <Badge>complete</Badge>
+          {completedTeams > 0 ? (
+            <Badge>{completedTeams}/{tile.teamProgress.length} complete</Badge>
           ) : (
-            <Badge variant="outline">tier {primaryProgress?.currentTier ?? 0}</Badge>
+            <Badge variant="outline">top tier {topProgress.currentTier}</Badge>
           )}
         </div>
       </CardHeader>
@@ -184,7 +241,7 @@ function TileTierBlock({
   teams: EventTeamSummary[]
 }) {
   return (
-    <div className="flex flex-col gap-3 rounded-lg border bg-background/40 p-3">
+    <div className="flex flex-col gap-3 rounded-lg bg-background/50 p-3 ring-1 ring-foreground/10">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <h2 className="truncate text-sm font-medium">
@@ -209,13 +266,23 @@ function TileTierBlock({
                     aria-hidden="true"
                   />
                   <span className="truncate">{team?.name ?? progress.teamName}</span>
+                  {progress.isAchieved ? <Badge variant="secondary">done</Badge> : null}
                 </div>
-                <span className="font-mono text-muted-foreground">
+                <span className="font-mono tabular-nums text-muted-foreground">
                   {formatNumber(progress.currentValue)}
                   {tier.requiredValue ? ` / ${formatNumber(tier.requiredValue)}` : ""}
                 </span>
               </div>
-              <Progress value={percent} aria-label={`${progress.teamName} ${tier.title ?? "tier"} progress`} />
+              <div className="grid grid-cols-[1fr_auto] items-center gap-2">
+                <Progress
+                  className="h-1.5"
+                  value={percent}
+                  aria-label={`${progress.teamName} ${tier.title ?? "tier"} progress`}
+                />
+                <span className="w-9 text-right font-mono text-[11px] tabular-nums text-muted-foreground">
+                  {Math.round(percent)}%
+                </span>
+              </div>
             </div>
           )
         })}
@@ -285,30 +352,6 @@ export function StateCard({ title, detail }: { title: string; detail: string }) 
         <CardTitle>{title}</CardTitle>
         <CardDescription>{detail}</CardDescription>
       </CardHeader>
-    </Card>
-  )
-}
-
-function MetricCard({
-  title,
-  value,
-  icon: Icon,
-}: {
-  title: string
-  value: string
-  icon: ComponentType<{ className?: string; "aria-hidden"?: boolean }>
-}) {
-  return (
-    <Card size="sm">
-      <CardHeader>
-        <div className="flex items-center justify-between gap-3">
-          <CardTitle>{title}</CardTitle>
-          <Icon className="size-4 text-muted-foreground" aria-hidden={true} />
-        </div>
-      </CardHeader>
-      <CardContent>
-        <Badge variant="outline">{value}</Badge>
-      </CardContent>
     </Card>
   )
 }

@@ -209,10 +209,18 @@ function ExternalRefreshCard({
   error: Error | null
   onRefresh: () => void
 }) {
-  const [expiredRefreshAt, setExpiredRefreshAt] = useState<string | null>(null)
-  const nextRefreshAt = refreshResult?.competitions
+  const [refreshClockMs, setRefreshClockMs] = useState(() => Date.now())
+  const resultNextRefreshAt = refreshResult?.competitions
     .map((competition) => competition.nextRefreshAvailableAt)
     .find(Boolean)
+  const freshnessCooldowns = freshness
+    .map((item) => cooldownUntil(item.lastSuccessfulSyncAt))
+    .filter((value): value is string => value !== null)
+  const freshnessNextRefreshAt =
+    freshness.length > 0 && freshnessCooldowns.length === freshness.length
+      ? freshnessCooldowns.sort()[0]
+      : null
+  const nextRefreshAt = resultNextRefreshAt ?? freshnessNextRefreshAt
 
   useEffect(() => {
     if (!nextRefreshAt) {
@@ -220,11 +228,16 @@ function ExternalRefreshCard({
     }
 
     const delayMs = Math.max(0, new Date(nextRefreshAt).getTime() - Date.now())
-    const timeoutId = window.setTimeout(() => setExpiredRefreshAt(nextRefreshAt), delayMs)
+    if (delayMs === 0) {
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => setRefreshClockMs(Date.now()), delayMs)
     return () => window.clearTimeout(timeoutId)
   }, [nextRefreshAt])
 
-  const canRefresh = !isRefreshing && (!nextRefreshAt || expiredRefreshAt === nextRefreshAt)
+  const canRefresh =
+    !isRefreshing && (!nextRefreshAt || new Date(nextRefreshAt).getTime() <= refreshClockMs)
 
   return (
     <Card>
@@ -239,6 +252,11 @@ function ExternalRefreshCard({
         {freshness.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             No linked TempleOSRS competition is currently visible.
+          </p>
+        ) : null}
+        {!canRefresh && nextRefreshAt ? (
+          <p className="text-sm text-muted-foreground">
+            Refresh available again at {formatTimestamp(nextRefreshAt)}.
           </p>
         ) : null}
         {error ? <p className="text-sm text-destructive">{error.message}</p> : null}
@@ -261,4 +279,13 @@ function ExternalRefreshCard({
       </CardContent>
     </Card>
   )
+}
+
+function cooldownUntil(lastSuccessfulSyncAt: string | null) {
+  if (!lastSuccessfulSyncAt) {
+    return null
+  }
+
+  const nextRefreshAt = new Date(new Date(lastSuccessfulSyncAt).getTime() + 5 * 60 * 1000)
+  return nextRefreshAt.getTime() > Date.now() ? nextRefreshAt.toISOString() : null
 }

@@ -51,6 +51,7 @@ import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
 import { formatNumber, formatTimestamp } from "@/components/event/event-format"
+import { cn } from "@/lib/utils"
 
 const tokenStorageKey = "swedes-event-planner-admin-token"
 const sampleCsv = [
@@ -228,7 +229,7 @@ export function AdminEventSetupPage() {
         <div className="flex flex-col gap-4">
           <SectionHeading
             title="Roster"
-            description="Imported participants and manual team assignment"
+            description="Local testing roster controls"
           />
           {!tokenReady ? (
             <StateCard title="Admin token required" detail="Enter the local admin token to load roster data." />
@@ -266,7 +267,7 @@ export function AdminEventSetupPage() {
 
           <SectionHeading
             title="TempleOSRS"
-            description="Read-only linked competition cache and diagnostics"
+            description="Read-only cache status for linked competitions"
           />
           {!tokenReady ? null : competitionsQuery.isLoading ? (
             <StateCard title="Loading Temple links" detail="Reading linked competitions." />
@@ -303,7 +304,7 @@ function AdminTokenCard({
     <Card>
       <CardHeader>
         <CardTitle>Admin Token</CardTitle>
-        <CardDescription>Stored in this browser for local admin/testing calls.</CardDescription>
+        <CardDescription>Local development/testing only. Stored in this browser.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <label className="flex flex-col gap-2 text-sm font-medium">
@@ -340,7 +341,7 @@ function CsvImportCard({
     <Card>
       <CardHeader>
         <CardTitle>CSV Import</CardTitle>
-        <CardDescription>Paste a Google Forms-style signup export.</CardDescription>
+        <CardDescription>Paste signup rows to create event participants for this demo event.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <Textarea
@@ -398,7 +399,7 @@ function TeamCreateCard({
     <Card>
       <CardHeader>
         <CardTitle>Teams</CardTitle>
-        <CardDescription>Create event-scoped teams before assignment.</CardDescription>
+        <CardDescription>Create teams first, then assign imported participants.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <label className="flex flex-col gap-2 text-sm font-medium">
@@ -436,7 +437,7 @@ function TempleLinkCard({
     <Card>
       <CardHeader>
         <CardTitle>Temple Link</CardTitle>
-        <CardDescription>Attach an existing TempleOSRS competition by ID.</CardDescription>
+        <CardDescription>Attach an existing TempleOSRS competition by ID for read-only sync.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <label className="flex flex-col gap-2 text-sm font-medium">
@@ -489,18 +490,27 @@ function RosterCard({
             <CardTitle>Participants</CardTitle>
             <CardDescription>{unassignedCount} without team assignment</CardDescription>
           </div>
-          <Badge variant={unassignedCount > 0 ? "secondary" : "default"}>
-            {participants.length} total
-          </Badge>
+          <div className="flex flex-wrap justify-end gap-2">
+            {unassignedCount > 0 ? <Badge variant="secondary">{unassignedCount} unassigned</Badge> : null}
+            <Badge variant={unassignedCount > 0 ? "outline" : "default"}>{participants.length} total</Badge>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {participants.map((participant, index) => (
           <div key={participant.id} className="flex flex-col gap-3">
             {index > 0 ? <Separator /> : null}
-            <div className="grid gap-3 md:grid-cols-[1fr_0.8fr_auto] md:items-center">
+            <div
+              className={cn(
+                "grid gap-3 rounded-md p-2 md:grid-cols-[1fr_0.8fr_auto] md:items-center",
+                participant.isUnassigned ? "bg-accent/10 ring-1 ring-accent/30" : "bg-transparent",
+              )}
+            >
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium">{participant.displayName}</p>
+                <div className="flex min-w-0 items-center gap-2">
+                  <p className="truncate text-sm font-medium">{participant.displayName}</p>
+                  {participant.isUnassigned ? <Badge variant="secondary">needs team</Badge> : null}
+                </div>
                 <p className="text-xs text-muted-foreground">
                   {participant.runeScapeName} · {participant.status}
                 </p>
@@ -582,7 +592,7 @@ function UnassignedCard({ participants }: { participants: AdminEventParticipant[
     <Card>
       <CardHeader>
         <CardTitle>Unassigned</CardTitle>
-        <CardDescription>Team-scoped events ignore these players until assigned.</CardDescription>
+        <CardDescription>These players will not count for team-scoped scoring until assigned.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-2">
         {participants.map((participant) => (
@@ -643,7 +653,7 @@ function TempleDiagnosticsCard({
             onClick={() => onSync(selectedCompetition)}
           >
             <RefreshCwIcon data-icon="inline-start" aria-hidden="true" />
-            Sync
+            Sync cache
           </Button>
         </div>
       </CardHeader>
@@ -666,8 +676,8 @@ function TempleDiagnosticsCard({
         </div>
         <div className="grid gap-2 text-sm md:grid-cols-3">
           <MetricPill label="Last success" value={formatNullableTime(selectedCompetition.lastSuccessfulSyncAt)} />
-          <MetricPill label="Players" value={playerMetrics.length.toString()} />
-          <MetricPill label="Teams" value={teamMetrics.length.toString()} />
+          <MetricPill label="Cached players" value={playerMetrics.length.toString()} />
+          <MetricPill label="Cached teams" value={teamMetrics.length.toString()} />
         </div>
         {syncError ? <p className="text-sm text-destructive">{errorText(syncError)}</p> : null}
         {selectedCompetition.lastSyncError ? (

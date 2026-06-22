@@ -23,6 +23,8 @@ public sealed class AdminDevSeedService(
     {
         var now = clock.UtcNow;
         var eventDefinition = await EnsureEventAsync(now, cancellationToken);
+        await ResetDemoEventAsync(eventDefinition.Id, cancellationToken);
+
         var blue = await EnsureTeamAsync(eventDefinition.Id, "Blue", now, cancellationToken);
         var gold = await EnsureTeamAsync(eventDefinition.Id, "Gold", now, cancellationToken);
         var green = await EnsureTeamAsync(eventDefinition.Id, "Green", now, cancellationToken);
@@ -118,7 +120,6 @@ public sealed class AdminDevSeedService(
             now,
             cancellationToken);
 
-        await ResetDemoProgressAsync(eventDefinition.Id, cancellationToken);
         await SeedProgressAsync(eventDefinition.Id, tobTile.Id, tobTier.Id, tobRule.Id, blue.Id, sebbe.Id, 7, 10, isCompleted: false, now.AddMinutes(-40), cancellationToken);
         await SeedProgressAsync(eventDefinition.Id, tobTile.Id, tobTier.Id, tobRule.Id, gold.Id, oskar.Id, 10, 10, isCompleted: true, now.AddMinutes(-35), cancellationToken);
         await SeedProgressAsync(eventDefinition.Id, petTile.Id, petTier.Id, petRule.Id, blue.Id, alicia.Id, 1, 1, isCompleted: true, now.AddMinutes(-30), cancellationToken);
@@ -433,8 +434,17 @@ public sealed class AdminDevSeedService(
         return competition;
     }
 
-    private async Task ResetDemoProgressAsync(long eventId, CancellationToken cancellationToken)
+    private async Task ResetDemoEventAsync(long eventId, CancellationToken cancellationToken)
     {
+        var boardIds = await dbContext.BingoBoards
+            .Where(board => board.EventId == eventId)
+            .Select(board => board.Id)
+            .ToListAsync(cancellationToken);
+        var tileIds = await dbContext.BingoTiles
+            .Where(tile => boardIds.Contains(tile.BoardId))
+            .Select(tile => tile.Id)
+            .ToListAsync(cancellationToken);
+
         var contributions = await dbContext.EventProgressContributions
             .Where(contribution => contribution.EventId == eventId)
             .ToListAsync(cancellationToken);
@@ -444,10 +454,38 @@ public sealed class AdminDevSeedService(
         var tierProgress = await dbContext.EventTileTierProgress
             .Where(progress => progress.EventId == eventId)
             .ToListAsync(cancellationToken);
+        var unlockConditions = await dbContext.TileUnlockConditions
+            .Where(condition => tileIds.Contains(condition.TileId))
+            .ToListAsync(cancellationToken);
+        var rules = await dbContext.TileRules
+            .Where(rule => tileIds.Contains(rule.TileId))
+            .ToListAsync(cancellationToken);
+        var tiers = await dbContext.BingoTileTiers
+            .Where(tier => tileIds.Contains(tier.TileId))
+            .ToListAsync(cancellationToken);
+        var tiles = await dbContext.BingoTiles
+            .Where(tile => boardIds.Contains(tile.BoardId))
+            .ToListAsync(cancellationToken);
+        var participants = await dbContext.EventParticipants
+            .Where(participant => participant.EventId == eventId)
+            .ToListAsync(cancellationToken);
+        var teams = await dbContext.EventTeams
+            .Where(team => team.EventId == eventId)
+            .ToListAsync(cancellationToken);
+        var externalCompetitions = await dbContext.ExternalCompetitions
+            .Where(competition => competition.EventId == eventId)
+            .ToListAsync(cancellationToken);
 
         dbContext.EventProgressContributions.RemoveRange(contributions);
         dbContext.EventTileProgress.RemoveRange(tileProgress);
         dbContext.EventTileTierProgress.RemoveRange(tierProgress);
+        dbContext.TileUnlockConditions.RemoveRange(unlockConditions);
+        dbContext.TileRules.RemoveRange(rules);
+        dbContext.BingoTileTiers.RemoveRange(tiers);
+        dbContext.BingoTiles.RemoveRange(tiles);
+        dbContext.EventParticipants.RemoveRange(participants);
+        dbContext.EventTeams.RemoveRange(teams);
+        dbContext.ExternalCompetitions.RemoveRange(externalCompetitions);
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
