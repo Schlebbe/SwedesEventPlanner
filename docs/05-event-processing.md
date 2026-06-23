@@ -21,7 +21,8 @@ ActivityWorker
   -> find active participations for that player
   -> evaluate matching rules
   -> insert progress contributions
-  -> update current progress
+  -> update tier progress
+  -> derive tile summary progress
   -> mark job processed
 
 TempleSyncWorker
@@ -29,7 +30,8 @@ TempleSyncWorker
   -> update cached external_competition_metrics
   -> record external_competition_sync_runs
   -> recalculate affected external_competition_metric rules
-  -> update current progress
+  -> update affected tier progress
+  -> derive tile summary progress
 ```
 
 `POST /api/activity` is the mock/dev ingestion endpoint used by simulator and local testing tools. Future production RuneLite plugin ingestion should use the canonical `/api/plugin/...` endpoints.
@@ -159,12 +161,14 @@ When a rule matches activity, insert a contribution before updating current prog
 
 ```text
 Insert event_progress_contributions
-Update event_tile_progress
+Update event_tile_tier_progress
+Recalculate achieved/scored tier state
+Derive event_tile_progress summary fields
 ```
 
-The contribution table provides auditability and makes progress rebuildable.
+The contribution table provides auditability and makes progress rebuildable. Tier progress is the source of truth for visible progress and scoring.
 
-For `external_competition_metric` rules, progress should be recalculated from cached competition rows after a sync. Contributions should record the visible delta or audit entry caused by the sync run.
+For `external_competition_metric` rules, progress should be recalculated from cached competition rows after a sync. Contributions should record the visible delta or audit entry caused by the sync run. For tier-backed rules, calculate the delta from the tier's previous current value rather than from a tile-level aggregate.
 
 Temple-backed progress can increase or decrease when cached TempleOSRS gains change. Do not maintain a separate monotonic scoring value for XP/KC tiles.
 

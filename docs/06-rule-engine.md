@@ -127,6 +127,12 @@ tier achieved = true
 
 Tier scoring may be separate from achievement. For cumulative category/tier layouts, a later tier can be achieved before earlier tiers are scored, but should not award score until prerequisite lower tiers have scored.
 
+Tier progress rows are the source of truth for visible progress. A tile-level aggregate can exist for compatibility and sorting, but public UI should display each tier's own current value, target, achieved state, and scored state. Tile-level progress should not mix unrelated units from different tiers.
+
+When a rule contributes to one tier, all other tiers on the same tile with the same rule type and same metric configuration, ignoring only threshold fields such as `required`, `requiredValue`, or `tiers`, should receive the same cumulative progress value. This lets point-threshold tiers share one points table while keeping each tier's target independent.
+
+Scoring is recalculated in tier order. If a later tier was already achieved, it should become scored immediately after all earlier required tiers become scored.
+
 ## item_count rule
 
 Counts matching item drops.
@@ -181,6 +187,8 @@ Behavior:
 ```text
 If activity item matches an entry in pointsTable, add that many points.
 ```
+
+Targets are cumulative totals, not additional remaining values. For example, if a Scythe is worth 7 points, two Scythes give 14 total points. With TOB targets of 10, 25, and 50, tier 1 is scored and tier 2 displays 14 / 25 progress.
 
 ## xp_gained rule
 
@@ -296,6 +304,8 @@ player value = gained_value for that participant
 TempleOSRS competition gain remains the scoring source. Plugin XP/KC snapshots should not be used for MVP scoring.
 
 Because this rule reads cached aggregate state rather than a single incoming activity event, progress should be recalculated after external competition syncs and contribution records should describe the sync/delta that caused the visible progress change.
+
+For tier-backed rules, the sync delta should be calculated from that tier's previous current value, not from `event_tile_progress.current_value`. This prevents an XP/KC tier from overwriting or confusing item-count or point-threshold tiers on the same tile.
 
 Progress may increase or decrease if TempleOSRS returns changed gains. The rule should not maintain a separate monotonic scoring value or infer/repair Temple values locally.
 

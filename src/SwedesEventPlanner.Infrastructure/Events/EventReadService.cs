@@ -151,7 +151,10 @@ public sealed class EventReadService(EventPlannerDbContext dbContext) : IEventRe
                     .Where(tier => tier.TileId == tile.Id)
                     .Select(tier =>
                     {
-                        var requiredValue = GetRequiredValueForTier(tier, rules);
+                        var rule = GetRuleForTier(tier, rules);
+                        var requiredValue = rule is null
+                            ? null
+                            : TierProgressScoringService.GetRequiredValue(rule.ConfigJson, tier.TierNumber);
                         var tierTeamProgress = teams
                             .Select(team =>
                             {
@@ -179,6 +182,7 @@ public sealed class EventReadService(EventPlannerDbContext dbContext) : IEventRe
                             tier.Description,
                             tier.ScoreValue,
                             tier.IsRequiredForBoardCompletion,
+                            rule?.RuleType,
                             requiredValue,
                             tierTeamProgress);
                     })
@@ -265,6 +269,7 @@ public sealed class EventReadService(EventPlannerDbContext dbContext) : IEventRe
                         tier.Description,
                         tier.ScoreValue,
                         tier.IsRequiredForBoardCompletion,
+                        tier.RuleType,
                         tier.RequiredValue,
                         tier.TeamProgress.Where(progress => progress.TeamId == teamId).ToList()))
                     .ToList()))
@@ -385,20 +390,13 @@ public sealed class EventReadService(EventPlannerDbContext dbContext) : IEventRe
             .ToList();
     }
 
-    private static decimal? GetRequiredValueForTier(
+    private static TileRule? GetRuleForTier(
         BingoTileTier tier,
         IReadOnlyCollection<TileRule> rules)
     {
-        var rule = rules
+        return rules
             .Where(candidate => candidate.TileTierId == tier.Id)
             .OrderBy(candidate => candidate.Id)
             .FirstOrDefault();
-
-        if (rule is null)
-        {
-            return null;
-        }
-
-        return TierProgressScoringService.GetRequiredValue(rule.ConfigJson, tier.TierNumber);
     }
 }

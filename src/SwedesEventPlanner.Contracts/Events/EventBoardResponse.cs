@@ -50,6 +50,7 @@ public sealed record BoardTileTierResponse(
     string? Description,
     int ScoreValue,
     bool IsRequiredForBoardCompletion,
+    string? RuleType,
     decimal? RequiredValue,
     IReadOnlyList<BoardTileTierTeamProgressResponse> TeamProgress);
 

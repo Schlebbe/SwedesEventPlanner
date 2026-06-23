@@ -186,7 +186,7 @@ function TeamOverviewCard({
         <div className="grid grid-cols-3 gap-2 text-sm">
           <Metric label="Scored tiers" value={team.scoredTiers.toString()} />
           <Metric label="Completed tiles" value={team.completedTiles.toString()} />
-          <Metric label="Progress total" value={team.currentValue.toString()} />
+          <Metric label="Contributions" value={team.contributionCount.toString()} />
         </div>
         <Button asChild variant="outline">
           <Link to={`/events/${eventSlug}/teams/${team.id}`}>Open Team Board</Link>

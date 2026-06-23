@@ -979,7 +979,9 @@ Recommended constraint:
 UNIQUE (event_id, tile_id, team_id, player_id)
 ```
 
-This row stores the aggregate tile-level view. Tier-level achieved/scored state should be stored in `event_tile_tier_progress`.
+This row stores an aggregate tile-level view for compatibility and summary sorting. Tier-level progress is the source of truth for visible progress and scoring.
+
+`current_value` should not mix unrelated units. For tiles where all tiers use the same metric and config shape except thresholds, it may be derived from that shared cumulative value. For mixed-condition tiles, it should be treated as summary-only, such as scored tier points, and should not be shown as the main public progress value.
 
 ## event_tile_tier_progress
 
@@ -1010,6 +1012,8 @@ Recommended constraint:
 UNIQUE (event_id, tile_tier_id, team_id, player_id)
 ```
 
+This table is the source of truth for public tier progress. Later tier progress may exist before earlier tiers are scored. In that case `is_achieved` can be true while `is_scored` remains false until the earlier required tiers have scored.
+
 ## event_progress_contributions
 
 Auditable record of each activity contribution.
@@ -1023,8 +1027,8 @@ tile_id BIGINT NOT NULL REFERENCES bingo_tiles(id),
 tile_tier_id BIGINT NULL REFERENCES bingo_tile_tiers(id),
 rule_id BIGINT NOT NULL REFERENCES tile_rules(id),
 team_id BIGINT NULL REFERENCES event_teams(id),
-player_id BIGINT NOT NULL REFERENCES players(id),
-activity_event_id BIGINT NOT NULL REFERENCES activity_events(id),
+player_id BIGINT NULL REFERENCES players(id),
+activity_event_id BIGINT NULL REFERENCES activity_events(id),
 value_added NUMERIC NOT NULL,
 description TEXT NULL,
 created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -1040,6 +1044,8 @@ UNIQUE (event_id, tile_id, rule_id, activity_event_id)
 This prevents the same activity from being counted twice for the same tile/rule/event.
 
 The same activity can still count for multiple events.
+
+External competition sync contributions have no activity event and may have no player. They should still include the affected event, tile, tier, rule, team or player scope, delta value, and sync metadata for auditability.
 
 ## item_groups
 

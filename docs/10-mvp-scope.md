@@ -113,7 +113,8 @@ A worker should evaluate queued activity against all relevant active events.
 The system should store:
 
 ```text
-current tile progress
+tier progress
+derived tile summary progress
 progress contribution history
 ```
 

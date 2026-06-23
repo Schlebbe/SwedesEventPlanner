@@ -101,7 +101,7 @@ Players not signed up do not progress events.
 Activity before event start does not progress events.
 Activity after event end does not progress events.
 Duplicate activity does not double-count.
-Cached TempleOSRS competition metrics update XP/KC tile progress.
+Cached TempleOSRS competition metrics update XP/KC tier progress.
 Team-based TempleOSRS competitions score from cached Temple team totals.
 Non-team TempleOSRS competitions score from cached per-player gains grouped by local event teams.
 Public TempleOSRS sync requests respect the per-competition cooldown.
@@ -276,11 +276,11 @@ This is not an implementation task list, but a set of behaviors the system shoul
 Scythe drop gives TOB points in multiple active events.
 Drop from unsigned player creates activity but no event progress.
 Duplicate Scythe payload does not double-count.
-Temple cached XP/KC metrics update external_competition_metric tile progress.
+Temple cached XP/KC metrics update external_competition_metric tier progress.
 Public Temple sync cooldown is per competition, not per user.
 Admin force-sync bypasses cooldown and is logged.
 Admin force-sync does not create duplicate concurrent sync jobs.
 UI freshness uses last successful sync time.
 Failed syncs are visible in admin/testing views.
-Contribution history explains tile progress.
+Contribution history explains tile and tier progress.
 ```

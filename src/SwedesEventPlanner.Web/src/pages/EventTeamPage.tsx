@@ -94,7 +94,9 @@ export function EventTeamPage() {
     tile.teamProgress.some((progress) => progress.teamId === data.team.id && progress.isCompleted),
   ).length
   const activeTiles = data.board.tiles.filter((tile) =>
-    tile.teamProgress.some((progress) => progress.currentValue > 0),
+    tile.tiers.some((tier) =>
+      tier.teamProgress.some((progress) => progress.teamId === data.team.id && progress.currentValue > 0),
+    ),
   ).length
   const externalFreshness = data.externalCompetitionFreshness
 

@@ -105,6 +105,10 @@ Tier 3 is not scored
 Tier 3 scores only after tier 1 and tier 2 are scored
 ```
 
+Later tier progress can also accumulate before earlier tiers are scored. This matters for mixed-condition tiles, such as a tile where tier 1 counts Zulrah drops, tier 2 counts Venator shards from Muspah, and tier 3 counts a Vorkath visage. The Muspah tier should show its own progress as soon as shards are received, but its score should wait until the Zulrah tier is scored.
+
+Public board views should display progress from tier rows. A single tile-level value is only a derived summary and should not be used as the main progress display for tiles whose tiers use different units.
+
 ## Grid completion modes
 
 Grid boards should support configurable completion modes.
@@ -177,6 +181,8 @@ Rule:
 ```
 
 Additional TOB tiers would have their own `bingo_tile_tiers` rows and rules with different `required` values.
+
+TOB point targets are cumulative. With targets of 10, 25, and 50, two Scythes worth 7 points each produce 14 total points: tier 1 scores and tier 2 displays 14 / 25.
 
 ## Example Yama tile with cumulative armor
 
@@ -326,6 +332,8 @@ score by custom event rules
 ```
 
 The MVP can display tile progress without needing to finalize every possible scoring system.
+
+For the current category/tier MVP, team score is based on scored tier points. Mixed tile progress values should not be summed into team score.
 
 ## Contribution history
 

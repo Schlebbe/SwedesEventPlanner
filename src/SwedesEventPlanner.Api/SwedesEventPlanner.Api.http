@@ -1,6 +1,6 @@
 @baseUrl = http://localhost:5000
 @adminToken = dev-admin-token-change-me
-@eventSlug = dummy-bingo-2026
+@eventSlug = test-bingo-2026
 
 ### 1. Liveness
 GET {{baseUrl}}/health
@@ -207,7 +207,7 @@ POST {{baseUrl}}/api/activity
 Content-Type: application/json
 
 {
-  "playerName": "Sebbe",
+  "playerName": "Schlebbe",
   "activityType": "item_drop",
   "source": "Theatre of Blood",
   "itemId": 22486,

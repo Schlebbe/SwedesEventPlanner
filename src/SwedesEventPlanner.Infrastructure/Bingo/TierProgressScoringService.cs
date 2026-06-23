@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using SwedesEventPlanner.Domain.Bingo;
 using SwedesEventPlanner.Infrastructure.Persistence;
@@ -104,6 +105,7 @@ internal sealed class TierProgressScoringService(EventPlannerDbContext dbContext
             return;
         }
 
+        tileProgress.CurrentValue = GetDerivedTileCurrentValue(tiers, rules, progressRows);
         tileProgress.CurrentTier = currentScoredTier;
         tileProgress.IsCompleted = requiredTierIds.Count > 0 && requiredTierIds.All(scoredRequiredTierIds.Contains);
         tileProgress.CompletedAt = tileProgress.IsCompleted ? tileProgress.CompletedAt ?? now : null;
@@ -162,5 +164,70 @@ internal sealed class TierProgressScoringService(EventPlannerDbContext dbContext
         }
 
         return null;
+    }
+
+    private static decimal GetDerivedTileCurrentValue(
+        IReadOnlyList<BingoTileTier> tiers,
+        IReadOnlyCollection<TileRule> rules,
+        IReadOnlyCollection<EventTileTierProgress> progressRows)
+    {
+        if (progressRows.Count == 0)
+        {
+            return 0;
+        }
+
+        if (UsesSingleProgressUnit(tiers, rules))
+        {
+            return progressRows.Max(progress => progress.CurrentValue);
+        }
+
+        return progressRows.Sum(progress => progress.ScoreAwarded);
+    }
+
+    private static bool UsesSingleProgressUnit(
+        IReadOnlyList<BingoTileTier> tiers,
+        IReadOnlyCollection<TileRule> rules)
+    {
+        var unitKeys = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var tier in tiers)
+        {
+            var rule = rules
+                .Where(candidate => candidate.TileTierId == tier.Id)
+                .OrderBy(candidate => candidate.Id)
+                .FirstOrDefault();
+
+            if (rule is null)
+            {
+                continue;
+            }
+
+            unitKeys.Add($"{rule.RuleType}:{NormalizeRuleUnitConfig(rule.ConfigJson)}");
+            if (unitKeys.Count > 1)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static string NormalizeRuleUnitConfig(string configJson)
+    {
+        var node = JsonNode.Parse(string.IsNullOrWhiteSpace(configJson) ? "{}" : configJson);
+        if (node is not JsonObject root)
+        {
+            return "{}";
+        }
+
+        RemoveThresholdProperties(root);
+        return root.ToJsonString(new JsonSerializerOptions { WriteIndented = false });
+    }
+
+    private static void RemoveThresholdProperties(JsonObject obj)
+    {
+        obj.Remove("required");
+        obj.Remove("requiredValue");
+        obj.Remove("tiers");
     }
 }

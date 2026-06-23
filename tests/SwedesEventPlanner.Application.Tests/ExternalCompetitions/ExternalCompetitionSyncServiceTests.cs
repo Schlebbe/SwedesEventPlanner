@@ -5,10 +5,12 @@ using Microsoft.Extensions.Options;
 using SwedesEventPlanner.Application.Clock;
 using SwedesEventPlanner.Application.ExternalCompetitions;
 using SwedesEventPlanner.Contracts.Admin;
+using SwedesEventPlanner.Domain.Activity;
 using SwedesEventPlanner.Domain.Bingo;
 using SwedesEventPlanner.Domain.Events;
 using SwedesEventPlanner.Domain.ExternalCompetitions;
 using SwedesEventPlanner.Domain.Players;
+using SwedesEventPlanner.Infrastructure.Activity;
 using SwedesEventPlanner.Infrastructure.Events;
 using SwedesEventPlanner.Infrastructure.ExternalCompetitions;
 using SwedesEventPlanner.Infrastructure.Persistence;
@@ -279,6 +281,48 @@ public sealed class ExternalCompetitionSyncServiceTests
         Assert.NotNull(Assert.Single(board.ExternalCompetitionFreshness).LastSuccessfulSyncAt);
     }
 
+    [Fact]
+    public async Task External_metric_tier_progress_does_not_overwrite_item_count_progress_on_same_tile()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedEventAsync(dbContext);
+        var client = new FakeTempleClient(TeamInfo([Team("1", "Blue", 100, ["Sebbe"])]));
+        var syncService = CreateService(dbContext, client);
+        var competition = await LinkCompetitionAsync(syncService, fixture);
+        await AddItemCountRuleAsync(dbContext, fixture);
+        var externalTier = await AddTileTierAsync(dbContext, fixture.Tile.Id, tierNumber: 2);
+        await AddExternalMetricRuleAsync(dbContext, fixture, competition.Id, required: 100, externalTier);
+        var activity = await AddItemActivityAsync(dbContext, fixture.Player.Id, itemId: 4151, quantity: 5);
+        var activityService = new ActivityProcessingService(
+            dbContext,
+            new FixedClock(TestNow),
+            NullLogger<ActivityProcessingService>.Instance);
+
+        await activityService.ProcessActivityAsync(activity.Id, CancellationToken.None);
+        await syncService.SyncCompetitionAsync(fixture.Event.Slug, competition.Id, CancellationToken.None);
+
+        var tierRows = await (
+                from progress in dbContext.EventTileTierProgress
+                join tier in dbContext.BingoTileTiers on progress.TileTierId equals tier.Id
+                select new
+                {
+                    tier.TierNumber,
+                    Progress = progress
+                })
+            .ToDictionaryAsync(row => row.TierNumber, row => row.Progress);
+        Assert.Equal(5m, tierRows[1].CurrentValue);
+        Assert.True(tierRows[1].IsScored);
+        Assert.Equal(100m, tierRows[2].CurrentValue);
+        Assert.True(tierRows[2].IsScored);
+        Assert.Equal(2m, (await dbContext.EventTileProgress.SingleAsync()).CurrentValue);
+        Assert.Equal(
+            100m,
+            await dbContext.EventProgressContributions
+                .Where(contribution => contribution.TileTierId == externalTier.Id)
+                .Select(contribution => contribution.ValueAdded)
+                .SingleAsync());
+    }
+
     private static readonly DateTimeOffset TestNow = new(2026, 7, 2, 18, 30, 0, TimeSpan.Zero);
 
     private static EventPlannerDbContext CreateDbContext()
@@ -416,12 +460,14 @@ public sealed class ExternalCompetitionSyncServiceTests
         EventPlannerDbContext dbContext,
         TestFixture fixture,
         long externalCompetitionId,
-        decimal required)
+        decimal required,
+        BingoTileTier? tier = null)
     {
+        var targetTier = tier ?? fixture.Tier;
         dbContext.TileRules.Add(new TileRule
         {
             TileId = fixture.Tile.Id,
-            TileTierId = fixture.Tier.Id,
+            TileTierId = targetTier.Id,
             RuleType = RuleTypes.ExternalCompetitionMetric,
             Scope = RuleScopes.Team,
             IsActive = true,
@@ -436,6 +482,84 @@ public sealed class ExternalCompetitionSyncServiceTests
             CreatedAt = TestNow
         });
         await dbContext.SaveChangesAsync();
+    }
+
+    private static async Task AddItemCountRuleAsync(
+        EventPlannerDbContext dbContext,
+        TestFixture fixture)
+    {
+        dbContext.TileRules.Add(new TileRule
+        {
+            TileId = fixture.Tile.Id,
+            TileTierId = fixture.Tier.Id,
+            RuleType = RuleTypes.ItemCount,
+            Scope = RuleScopes.Team,
+            IsActive = true,
+            ConfigJson = JsonSerializer.Serialize(new
+            {
+                activityType = ActivityTypes.ItemDrop,
+                itemIds = new[] { 4151 },
+                duplicatesCount = true,
+                required = 5
+            }),
+            CreatedAt = TestNow
+        });
+        await dbContext.SaveChangesAsync();
+    }
+
+    private static async Task<BingoTileTier> AddTileTierAsync(
+        EventPlannerDbContext dbContext,
+        long tileId,
+        int tierNumber)
+    {
+        var tier = new BingoTileTier
+        {
+            TileId = tileId,
+            TierNumber = tierNumber,
+            Title = $"Tier {tierNumber}",
+            ScoreValue = 1,
+            SortOrder = tierNumber,
+            IsRequiredForBoardCompletion = true
+        };
+        dbContext.BingoTileTiers.Add(tier);
+        await dbContext.SaveChangesAsync();
+        return tier;
+    }
+
+    private static async Task<ActivityEvent> AddItemActivityAsync(
+        EventPlannerDbContext dbContext,
+        long playerId,
+        int itemId,
+        int quantity)
+    {
+        var activity = new ActivityEvent
+        {
+            PlayerId = playerId,
+            ActivityType = ActivityTypes.ItemDrop,
+            SourceSystem = "test",
+            SourceEndpoint = "/api/activity",
+            Source = "Abyssal demons",
+            ItemId = itemId,
+            ItemName = "Abyssal whip",
+            Quantity = quantity,
+            OccurredAt = TestNow,
+            ReceivedAt = TestNow,
+            RawPayloadJson = "{}",
+            DedupeKey = Guid.NewGuid().ToString("N")
+        };
+        dbContext.ActivityEvents.Add(activity);
+        await dbContext.SaveChangesAsync();
+
+        dbContext.ActivityEventItems.Add(new ActivityEventItem
+        {
+            ActivityEventId = activity.Id,
+            ItemId = itemId,
+            ItemName = "Abyssal whip",
+            Quantity = quantity,
+            Source = "Abyssal demons"
+        });
+        await dbContext.SaveChangesAsync();
+        return activity;
     }
 
     private static TempleOsrsCompetitionInfo IndividualInfo(

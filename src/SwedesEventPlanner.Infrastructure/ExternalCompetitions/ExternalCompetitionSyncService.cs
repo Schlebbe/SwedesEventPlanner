@@ -643,31 +643,32 @@ public sealed class ExternalCompetitionSyncService(
             dbContext.EventTileProgress.Add(progress);
         }
 
-        var delta = currentValue - progress.CurrentValue;
-        progress.CurrentValue = currentValue;
         progress.UpdatedAt = now;
         progress.MetadataJson = JsonSerializer.Serialize(new { source = RuleTypes.ExternalCompetitionMetric, syncRunId }, JsonOptions);
 
-        if (delta != 0)
-        {
-            dbContext.EventProgressContributions.Add(new EventProgressContribution
-            {
-                EventId = eventId,
-                TileId = rule.TileId,
-                TileTierId = rule.TileTierId,
-                RuleId = rule.Id,
-                TeamId = teamId,
-                PlayerId = playerId,
-                ActivityEventId = null,
-                ValueAdded = delta,
-                Description = "TempleOSRS sync adjustment.",
-                CreatedAt = now,
-                MetadataJson = JsonSerializer.Serialize(new { source = RuleTypes.ExternalCompetitionMetric, syncRunId }, JsonOptions)
-            });
-        }
-
         if (!rule.TileTierId.HasValue)
         {
+            var delta = currentValue - progress.CurrentValue;
+            progress.CurrentValue = currentValue;
+
+            if (delta != 0)
+            {
+                dbContext.EventProgressContributions.Add(new EventProgressContribution
+                {
+                    EventId = eventId,
+                    TileId = rule.TileId,
+                    TileTierId = rule.TileTierId,
+                    RuleId = rule.Id,
+                    TeamId = teamId,
+                    PlayerId = playerId,
+                    ActivityEventId = null,
+                    ValueAdded = delta,
+                    Description = "TempleOSRS sync adjustment.",
+                    CreatedAt = now,
+                    MetadataJson = JsonSerializer.Serialize(new { source = RuleTypes.ExternalCompetitionMetric, syncRunId }, JsonOptions)
+                });
+            }
+
             return delta == 0 ? 0 : 1;
         }
 
@@ -694,9 +695,28 @@ public sealed class ExternalCompetitionSyncService(
             dbContext.EventTileTierProgress.Add(tierProgress);
         }
 
+        var tierDelta = currentValue - tierProgress.CurrentValue;
         tierProgress.CurrentValue = currentValue;
         tierProgress.UpdatedAt = now;
         tierProgress.MetadataJson = JsonSerializer.Serialize(new { source = RuleTypes.ExternalCompetitionMetric, syncRunId }, JsonOptions);
+
+        if (tierDelta != 0)
+        {
+            dbContext.EventProgressContributions.Add(new EventProgressContribution
+            {
+                EventId = eventId,
+                TileId = rule.TileId,
+                TileTierId = rule.TileTierId,
+                RuleId = rule.Id,
+                TeamId = teamId,
+                PlayerId = playerId,
+                ActivityEventId = null,
+                ValueAdded = tierDelta,
+                Description = "TempleOSRS sync adjustment.",
+                CreatedAt = now,
+                MetadataJson = JsonSerializer.Serialize(new { source = RuleTypes.ExternalCompetitionMetric, syncRunId }, JsonOptions)
+            });
+        }
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
@@ -708,7 +728,7 @@ public sealed class ExternalCompetitionSyncService(
             now,
             cancellationToken);
 
-        return delta == 0 ? 0 : 1;
+        return tierDelta == 0 ? 0 : 1;
     }
 
     private async Task<long?> FindPlayerIdAsync(string normalizedName, CancellationToken cancellationToken)

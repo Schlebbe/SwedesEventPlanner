@@ -98,7 +98,7 @@ The database stores:
 - Bingo boards and tiles.
 - Tile rules.
 - Progress contributions.
-- Current progress.
+- Tier progress and derived tile summary progress.
 
 Use EF Core migrations in `SwedesEventPlanner.Infrastructure` with the `DbContext`.
 
@@ -114,7 +114,7 @@ For each activity event, it should:
 2. Find all active event participations for that player.
 3. Evaluate matching rules for each event.
 4. Store progress contributions.
-5. Update current progress.
+5. Update tier progress and derive tile summary progress.
 
 The background worker should also include a Temple sync worker for linked external competitions.
 
@@ -155,7 +155,7 @@ The website displays:
 - Event detail pages.
 - Team lists.
 - Bingo boards.
-- Tile progress.
+- Tile and tier progress.
 - Contribution history.
 - Player/team leaderboards.
 - TempleOSRS last successful sync time and next public refresh availability for linked competitions.
@@ -176,7 +176,7 @@ Use React Router from the start.
 6. Worker picks up the queued activity.
 7. Worker finds that the player is in two active events.
 8. Rule engine evaluates each event's rules.
-9. Summer Bingo TOB tile receives +7 points.
+9. Summer Bingo TOB tier progress receives +7 points.
 10. Raid Drop Hunt receives +7 points.
 11. Website displays updated progress.
 ```

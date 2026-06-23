@@ -62,6 +62,7 @@ export type BoardTileTier = {
   description: string | null
   scoreValue: number
   isRequiredForBoardCompletion: boolean
+  ruleType: string | null
   requiredValue: number | null
   teamProgress: BoardTileTierTeamProgress[]
 }

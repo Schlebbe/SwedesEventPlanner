@@ -116,6 +116,118 @@ public sealed class ActivityProcessingServiceTests
     }
 
     [Fact]
+    public async Task Tob_cumulative_point_tiers_score_first_tier_and_carry_progress_to_later_tiers()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedEventAsync(dbContext, ruleType: RuleTypes.PointThreshold, required: 10);
+        var tile = await dbContext.BingoTiles.SingleAsync();
+        await AddTileTierRuleAsync(dbContext, tile.Id, tierNumber: 2, RuleTypes.PointThreshold, required: 25);
+        await AddTileTierRuleAsync(dbContext, tile.Id, tierNumber: 3, RuleTypes.PointThreshold, required: 50);
+        var firstScythe = await AddItemActivityAsync(dbContext, fixture.Player.Id, itemId: 22486);
+        var secondScythe = await AddItemActivityAsync(dbContext, fixture.Player.Id, itemId: 22486);
+        var service = CreateProcessingService(dbContext);
+
+        await service.ProcessActivityAsync(firstScythe.Id, CancellationToken.None);
+        await service.ProcessActivityAsync(secondScythe.Id, CancellationToken.None);
+
+        var tierRows = await GetTierProgressByTierNumberAsync(dbContext);
+        Assert.Equal(14m, tierRows[1].CurrentValue);
+        Assert.True(tierRows[1].IsScored);
+        Assert.Equal(1, tierRows[1].ScoreAwarded);
+        Assert.Equal(14m, tierRows[2].CurrentValue);
+        Assert.False(tierRows[2].IsAchieved);
+        Assert.False(tierRows[2].IsScored);
+        Assert.Equal(14m, tierRows[3].CurrentValue);
+        Assert.False(tierRows[3].IsScored);
+        Assert.Equal(14m, (await dbContext.EventTileProgress.SingleAsync()).CurrentValue);
+    }
+
+    [Fact]
+    public async Task Tob_cumulative_point_tiers_carry_over_to_tier_two_after_more_points()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedEventAsync(dbContext, ruleType: RuleTypes.PointThreshold, required: 10);
+        var tile = await dbContext.BingoTiles.SingleAsync();
+        await AddTileTierRuleAsync(dbContext, tile.Id, tierNumber: 2, RuleTypes.PointThreshold, required: 25);
+        await AddTileTierRuleAsync(dbContext, tile.Id, tierNumber: 3, RuleTypes.PointThreshold, required: 50);
+        var firstScythe = await AddItemActivityAsync(dbContext, fixture.Player.Id, itemId: 22486);
+        var secondScythe = await AddItemActivityAsync(dbContext, fixture.Player.Id, itemId: 22486);
+        var rapiers = await AddItemActivityAsync(dbContext, fixture.Player.Id, itemId: 22324, quantity: 4);
+        var service = CreateProcessingService(dbContext);
+
+        await service.ProcessActivityAsync(firstScythe.Id, CancellationToken.None);
+        await service.ProcessActivityAsync(secondScythe.Id, CancellationToken.None);
+        await service.ProcessActivityAsync(rapiers.Id, CancellationToken.None);
+
+        var tierRows = await GetTierProgressByTierNumberAsync(dbContext);
+        Assert.Equal(26m, tierRows[2].CurrentValue);
+        Assert.True(tierRows[2].IsAchieved);
+        Assert.True(tierRows[2].IsScored);
+        Assert.Equal(26m, tierRows[3].CurrentValue);
+        Assert.False(tierRows[3].IsScored);
+        var tileProgress = await dbContext.EventTileProgress.SingleAsync();
+        Assert.Equal(2, tileProgress.CurrentTier);
+        Assert.Equal(26m, tileProgress.CurrentValue);
+    }
+
+    [Fact]
+    public async Task Muspah_tier_progresses_before_zulrah_tier_but_scores_after_zulrah_scores()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedEventAsync(dbContext, ruleType: RuleTypes.ItemCount, required: 5);
+        var tile = await dbContext.BingoTiles.SingleAsync();
+        var zulrahRule = await dbContext.TileRules.SingleAsync();
+        zulrahRule.ConfigJson = CreateItemCountConfig([12922], required: 5);
+        await AddTileTierRuleAsync(
+            dbContext,
+            tile.Id,
+            tierNumber: 2,
+            RuleTypes.ItemCount,
+            required: 5,
+            itemIds: [27614]);
+        await dbContext.SaveChangesAsync();
+        var venatorShards = await AddItemActivityAsync(dbContext, fixture.Player.Id, itemId: 27614, quantity: 5);
+        var service = CreateProcessingService(dbContext);
+
+        await service.ProcessActivityAsync(venatorShards.Id, CancellationToken.None);
+
+        var tierRowsAfterMuspah = await GetTierProgressByTierNumberAsync(dbContext);
+        Assert.False(tierRowsAfterMuspah.ContainsKey(1));
+        Assert.Equal(5m, tierRowsAfterMuspah[2].CurrentValue);
+        Assert.True(tierRowsAfterMuspah[2].IsAchieved);
+        Assert.False(tierRowsAfterMuspah[2].IsScored);
+
+        var zulrahDrops = await AddItemActivityAsync(dbContext, fixture.Player.Id, itemId: 12922, quantity: 5);
+        await service.ProcessActivityAsync(zulrahDrops.Id, CancellationToken.None);
+
+        var tierRowsAfterZulrah = await GetTierProgressByTierNumberAsync(dbContext);
+        Assert.Equal(5m, tierRowsAfterZulrah[1].CurrentValue);
+        Assert.True(tierRowsAfterZulrah[1].IsScored);
+        Assert.True(tierRowsAfterZulrah[2].IsScored);
+        Assert.Equal(2, tierRowsAfterZulrah.Values.Sum(progress => progress.ScoreAwarded));
+    }
+
+    [Fact]
+    public async Task Mixed_rule_types_keep_visible_tier_progress_separate_from_tile_summary()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedEventAsync(dbContext, ruleType: RuleTypes.ItemCount, required: 5);
+        var tile = await dbContext.BingoTiles.SingleAsync();
+        await AddTileTierRuleAsync(dbContext, tile.Id, tierNumber: 2, RuleTypes.PointThreshold, required: 25);
+        var itemDrops = await AddItemActivityAsync(dbContext, fixture.Player.Id, itemId: 4151, quantity: 5);
+        var scythes = await AddItemActivityAsync(dbContext, fixture.Player.Id, itemId: 22486, quantity: 2);
+        var service = CreateProcessingService(dbContext);
+
+        await service.ProcessActivityAsync(itemDrops.Id, CancellationToken.None);
+        await service.ProcessActivityAsync(scythes.Id, CancellationToken.None);
+
+        var tierRows = await GetTierProgressByTierNumberAsync(dbContext);
+        Assert.Equal(5m, tierRows[1].CurrentValue);
+        Assert.Equal(14m, tierRows[2].CurrentValue);
+        Assert.Equal(1m, (await dbContext.EventTileProgress.SingleAsync()).CurrentValue);
+    }
+
+    [Fact]
     public async Task Later_tier_can_be_achieved_before_earlier_required_tier_but_scores_only_after_earlier_tier()
     {
         await using var dbContext = CreateDbContext();
@@ -346,6 +458,67 @@ public sealed class ActivityProcessingServiceTests
         });
     }
 
+    private static async Task<BingoTileTier> AddTileTierRuleAsync(
+        EventPlannerDbContext dbContext,
+        long tileId,
+        int tierNumber,
+        string ruleType,
+        decimal required,
+        IReadOnlyList<int>? itemIds = null)
+    {
+        var tier = new BingoTileTier
+        {
+            TileId = tileId,
+            TierNumber = tierNumber,
+            Title = $"Tier {tierNumber}",
+            ScoreValue = 1,
+            SortOrder = tierNumber,
+            IsRequiredForBoardCompletion = true
+        };
+        dbContext.BingoTileTiers.Add(tier);
+        await dbContext.SaveChangesAsync();
+
+        dbContext.TileRules.Add(new TileRule
+        {
+            TileId = tileId,
+            TileTierId = tier.Id,
+            RuleType = ruleType,
+            Scope = RuleScopes.Team,
+            IsActive = true,
+            ConfigJson = ruleType == RuleTypes.ItemCount
+                ? CreateItemCountConfig(itemIds ?? [4151], required)
+                : CreateRuleConfig(ruleType, required),
+            CreatedAt = TestNow
+        });
+        await dbContext.SaveChangesAsync();
+        return tier;
+    }
+
+    private static async Task<Dictionary<int, EventTileTierProgress>> GetTierProgressByTierNumberAsync(
+        EventPlannerDbContext dbContext)
+    {
+        return await (
+                from progress in dbContext.EventTileTierProgress
+                join tier in dbContext.BingoTileTiers on progress.TileTierId equals tier.Id
+                select new
+                {
+                    tier.TierNumber,
+                    Progress = progress
+                })
+            .ToDictionaryAsync(row => row.TierNumber, row => row.Progress);
+    }
+
+    private static string CreateItemCountConfig(IReadOnlyList<int> itemIds, decimal required)
+    {
+        return JsonSerializer.Serialize(new
+        {
+            activityType = ActivityTypes.ItemDrop,
+            itemIds,
+            duplicatesCount = true,
+            required
+        });
+    }
+
     private static async Task<ActivityEvent> AddItemActivityAsync(
         EventPlannerDbContext dbContext,
         long playerId,
@@ -359,6 +532,8 @@ public sealed class ActivityProcessingServiceTests
             22486 => "Scythe of vitur",
             22324 => "Ghrazi rapier",
             4151 => "Abyssal whip",
+            12922 => "Tanzanite fang",
+            27614 => "Venator shard",
             _ => "Unknown item"
         };
 

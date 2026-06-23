@@ -51,6 +51,8 @@ Use this checklist for Windows local development only. Do not deploy to the Rasp
 - Create an `item_count` rule with `itemIds`, `requiredValue`, and `duplicatesCount`.
 - Create a `point_threshold` rule with a `pointsTable` and `requiredValue`.
 - Create an `external_competition_metric` rule with `provider`, `externalCompetitionId`, `metricType`, `metricKey`, and `requiredValue`.
+- For a point tile, create multiple tiers that use the same points table with cumulative targets, such as 10, 25, and 50 points.
+- For a mixed tile, create tiers with different rule types or item groups and verify each tier shows its own progress.
 - If manual rules are supported by the current processing path, create a `manual` rule; otherwise leave it as setup data only for now.
 - Verify `/api/admin/events/{eventSlug}/board-setup` shows board, tiles, tiers, and rules.
 
@@ -82,8 +84,12 @@ Use this checklist for Windows local development only. Do not deploy to the Rasp
 - Verify `/events/{eventSlug}` shows a team-first scoreboard overview with team cards and recent contributions.
 - Open `/events/{eventSlug}/teams/{teamId}` from a team card.
 - Verify the team board shows tile progress, tier progress, contribution feed, and TempleOSRS freshness.
+- Verify point-threshold tiers show cumulative target progress, such as 14 / 25 after two 7-point drops.
+- Verify later tier progress can appear before earlier tiers score, but the later tier is marked ready rather than scored until prerequisites score.
+- Verify mixed-condition tiles display tier progress separately and do not show one combined mixed-unit progress value as the main tile progress.
 - Submit activity and verify the public overview/team board update through automatic polling without a manual browser reload.
 - Verify team-level Temple sync contributions with no player display safely.
+- Verify Temple-backed tier progress does not overwrite item-count or point-threshold tier progress on the same tile.
 - Verify negative Temple sync adjustments do not appear in the main public contribution feed.
 
 ## Public Refresh Cooldown

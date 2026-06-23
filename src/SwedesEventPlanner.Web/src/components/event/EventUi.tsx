@@ -163,8 +163,8 @@ export function EventHero({
               </div>
               <div className="flex gap-3 text-xs text-muted-foreground md:justify-end">
                 <span className="tabular-nums">{team.score} pts</span>
+                <span className="tabular-nums">{team.scoredTiers} tiers</span>
                 <span className="tabular-nums">{team.completedTiles} tiles</span>
-                <span className="tabular-nums">{formatNumber(team.currentValue)} total</span>
               </div>
             </div>
           ))
@@ -206,7 +206,7 @@ export function BoardTileCard({
     completedAt: null,
   }
   const topProgress = tile.teamProgress.reduce(
-    (current, candidate) => (candidate.currentValue > current.currentValue ? candidate : current),
+    (current, candidate) => (candidate.currentTier > current.currentTier ? candidate : current),
     tile.teamProgress[0] ?? fallbackProgress,
   )
 
@@ -249,7 +249,7 @@ function TileTierBlock({
             {tier.title ?? `Tier ${tier.tierNumber}`}
           </h2>
           <p className="text-xs text-muted-foreground">
-            {tier.requiredValue ? `Target ${formatNumber(tier.requiredValue)}` : "Target pending"}
+            {getTierTargetLabel(tier)}
           </p>
         </div>
         <Badge variant="secondary">{tier.scoreValue} pt</Badge>
@@ -405,4 +405,15 @@ function progressPercent(currentValue: number, requiredValue: number | null) {
   }
 
   return Math.min(100, Math.max(0, (currentValue / requiredValue) * 100))
+}
+
+function getTierTargetLabel(tier: BoardTileTier) {
+  if (!tier.requiredValue) {
+    return "Target pending"
+  }
+
+  const label = formatNumber(tier.requiredValue)
+  return tier.ruleType === "point_threshold"
+    ? `Cumulative target ${label}`
+    : `Target ${label}`
 }

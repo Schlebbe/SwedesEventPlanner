@@ -433,6 +433,8 @@ achieved = the tier condition happened
 scored = the tier counts toward board completion and points
 ```
 
+Tier progress is the public source of truth. Tile-level `current_value` exists only as a derived summary/compatibility field and must not mix unrelated units from tiers with different rule types or metric definitions.
+
 ## Board completion and scoring
 
 Teams win by completing the board first.
@@ -451,7 +453,8 @@ For the three-tier category layout:
 
 ```text
 each tier gives 1 point
-tiers are cumulative for scoring
+same-metric tier targets are cumulative totals
+team score is the sum of scored tier points
 ```
 
 If a later tier condition is satisfied before earlier tiers are satisfied, the later tier can be marked as achieved, but it should not award score until the earlier tiers are also complete.
@@ -464,6 +467,8 @@ Team receives a Scythe while still missing tier 1 and tier 2
 Tier 3 achievement is recorded
 Tier 3 score is not awarded until tier 1 and tier 2 are complete
 ```
+
+Later tier progress should still accumulate before earlier tiers score. When the earlier required tiers become scored, any already-achieved later required tiers should be recalculated and scored in order.
 
 Category/tier boards are complete when all required tiers are scored, not merely achieved.
 

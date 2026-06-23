@@ -283,7 +283,8 @@ Recommended approach:
 
 ```text
 Store snapshot processing metadata.
-Set current progress to recalculated value for that player/team.
+Set affected tier progress to the recalculated value for that player/team.
+Derive tile summary progress after tier scoring.
 Optionally store delta from previous calculated progress as the contribution value.
 ```
 
@@ -293,7 +294,7 @@ Example:
 Previous calculated Slayer progress: 800,000
 New calculated Slayer progress: 1,200,000
 Contribution value added: +400,000
-Current progress: 1,200,000
+Tier progress: 1,200,000
 ```
 
 ## Full player snapshot on login for future stats
